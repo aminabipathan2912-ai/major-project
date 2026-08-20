@@ -1,0 +1,86 @@
+models:
+  video:
+    name: "YOLOv8-public-safety"
+    type: "object_detection"
+    modality: "video"
+    pretrained: true
+    fine_tuned: false
+    dataset: "TBD"
+    version: "1.0.0"
+    weights_path: "ml/video/weights/"
+    input: "BGR frame (H x W x 3)"
+    output: "ModalityPrediction[event, confidence, bboxes]"
+    threshold: 0.60
+    supported_events:
+      - FIRE
+      - VIOLENCE
+      - ACCIDENT
+      - CROWD_ANOMALY
+    status: "PLANNED"  # LOADED | PLANNED | MOCKED
+
+  audio:
+    name: "YAMNet-emergency-sounds"
+    type: "audio_classification"
+    modality: "audio"
+    pretrained: true
+    fine_tuned: false
+    dataset: "TBD"
+    version: "1.0.0"
+    weights_path: "ml/audio/weights/"
+    input: "waveform (16kHz mono float32)"
+    output: "ModalityPrediction[event, confidence]"
+    threshold: 0.55
+    supported_events:
+      - GUNSHOT
+      - EXPLOSION
+      - ALARM
+      - SCREAM
+    status: "PLANNED"
+
+  text:
+    name: "distilbert-emergency-classifier"
+    type: "text_classification"
+    modality: "text"
+    pretrained: true
+    fine_tuned: false
+    dataset: "TBD"
+    version: "1.0.0"
+    weights_path: "ml/text/weights/"
+    input: "UTF-8 text string"
+    output: "ModalityPrediction[event, confidence]"
+    threshold: 0.50
+    supported_events:
+      - EMERGENCY
+      - NON_EMERGENCY
+      - HIGH_URGENCY
+    status: "PLANNED"
+
+  sensor:
+    name: "IsolationForest-anomaly-detector"
+    type: "anomaly_detection"
+    modality: "sensor"
+    pretrained: false
+    fine_tuned: false
+    dataset: "synthetic + rule-based"
+    version: "1.0.0"
+    weights_path: "ml/sensor/weights/"
+    input: "dict{temperature, smoke_level, pir_motion, humidity}"
+    output: "ModalityPrediction[event, anomaly_score]"
+    threshold: 0.60
+    supported_events:
+      - NORMAL
+      - MOTION_ANOMALY
+      - TEMPERATURE_ANOMALY
+      - SMOKE_ANOMALY
+    status: "PLANNED"
+
+  fusion:
+    name: "MultimodalFusionEngine"
+    type: "late_fusion"
+    version: "1.0.0"
+    levels:
+      - "weighted_late_fusion"    # Level 1
+      - "rule_based_aggregation"  # Level 2
+      - "trainable_mlp"           # Level 3 (future)
+    active_level: "rule_based_aggregation"
+    status: "PLANNED"

@@ -1,0 +1,64 @@
+# Live Multimodal Monitoring System for Public Safety
+# .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+
+# Environment
+.env
+*.env.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+
+# Logs
+*.log
+backend/logs/
+
+# ML weights / model files
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.joblib
+ml/*/weights/
+ml/fusion/trained/
+
+# Datasets (large files — store separately)
+datasets/raw/
+datasets/processed/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Node (frontend tooling if added later)
+node_modules/

@@ -1,0 +1,50 @@
+fusion:
+  # Per-modality weights must sum to 1.0
+  weights:
+    video: 0.35
+    audio: 0.25
+    text: 0.20
+    sensor: 0.20
+
+  # Minimum fused confidence to create an incident
+  min_confidence: 0.55
+
+  # Temporal confirmation window
+  temporal_window_sec: 3
+  temporal_min_detections: 2   # detections needed within window
+
+  # Cooldown between alerts for the same event type (seconds)
+  cooldown_sec: 30
+
+  # Duplicate suppression window (seconds)
+  duplicate_window_sec: 60
+
+severity:
+  LOW:
+    min_score: 0.0
+    max_score: 0.45
+    description: "One weak modality indicates an event"
+  MEDIUM:
+    min_score: 0.45
+    max_score: 0.65
+    description: "One strong modality indicates an event"
+  HIGH:
+    min_score: 0.65
+    max_score: 0.85
+    description: "Two or more modalities provide strong supporting evidence"
+  CRITICAL:
+    min_score: 0.85
+    max_score: 1.0
+    description: "Multiple modalities agree with very high confidence"
+
+# Multimodal agreement rules for severity escalation
+agreement_rules:
+  # Number of modalities that must agree to escalate severity
+  escalate_to_high: 2
+  escalate_to_critical: 3
+  agreement_threshold: 0.60   # each modality must be >= this
+
+# False-alarm reduction
+false_alarm:
+  min_modalities_for_alert: 1          # at least 1 modality must fire
+  single_modality_max_severity: MEDIUM # cap severity if only 1 modality

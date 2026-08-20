@@ -1,0 +1,149 @@
+datasets:
+  # ================================================================
+  # VIDEO DATASETS
+  # ================================================================
+  - name: "FireNet Dataset"
+    modality: video
+    source_url: "https://github.com/arpit-jadon/FireNet-LightWeight-Network-for-Fire-Detection"
+    classes_raw: [fire, no_fire]
+    class_mapping:
+      fire: FIRE
+      no_fire: NO_EVENT
+    task: classification
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "Resize to 224x224, normalize ImageNet stats"
+    why_relevant: "Direct fire detection — a core video safety event"
+    limitations: "Binary classification only; no bounding boxes"
+    status: PLANNED
+
+  - name: "RWF-2000 (Real-World Fights)"
+    modality: video
+    source_url: "https://github.com/mchengny/RWF2000-Video-Database-for-Violence-Detection"
+    classes_raw: [Fight, NonFight]
+    class_mapping:
+      Fight: VIOLENCE
+      NonFight: NO_EVENT
+    task: classification
+    split: {train: 0.80, val: 0.10, test: 0.10}
+    preprocessing: "Sample 16 frames per clip, resize to 224x224"
+    why_relevant: "Violence detection — key public-safety video event"
+    limitations: "No crowd/accident classes"
+    status: PLANNED
+
+  - name: "UCF-Crime Dataset"
+    modality: video
+    source_url: "https://www.crcv.ucf.edu/projects/real-world/"
+    classes_raw: [Abuse, Arrest, Arson, Assault, Burglary, Explosion, Fighting, RoadAccidents, Robbery, Shooting, Shoplifting, Stealing, Vandalism, NormalVideos]
+    class_mapping:
+      Arson: FIRE
+      Explosion: EXPLOSION_VIDEO
+      Fighting: VIOLENCE
+      RoadAccidents: ACCIDENT
+      Assault: VIOLENCE
+      NormalVideos: NO_EVENT
+    task: anomaly_detection
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "C3D/I3D feature extraction"
+    why_relevant: "Covers multiple video safety events in real CCTV footage"
+    limitations: "Weakly supervised; no per-frame annotations"
+    status: PLANNED
+
+  # ================================================================
+  # AUDIO DATASETS
+  # ================================================================
+  - name: "UrbanSound8K"
+    modality: audio
+    source_url: "https://urbansounddataset.weebly.com/urbansound8k.html"
+    classes_raw: [gunshot, siren, car_horn, engine_idling, street_music, drilling, jackhammer, air_conditioner, children_playing, dog_bark]
+    class_mapping:
+      gunshot: GUNSHOT
+      siren: ALARM
+    task: classification
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "Mel-spectrogram 128 bins, 22050 Hz, 4-second clips"
+    why_relevant: "Contains gunshot and alarm classes relevant to public safety"
+    limitations: "No explosion or scream class"
+    status: PLANNED
+
+  - name: "ESC-50 Environmental Sound Classification"
+    modality: audio
+    source_url: "https://github.com/karolpiczak/ESC-50"
+    classes_raw: [crying_baby, sneezing, clapping, breathing, coughing, footsteps, laughing, brushing_teeth, snoring, drinking_sipping, door_wood_knock, mouse_click, keyboard_typing, door_wood_creaks, can_opening, washing_machine, vacuum_cleaner, clock_alarm, clock_tick, glass_breaking, helicopter, chainsaw, siren, car_horn, engine, train, church_bells, airplane, fireworks, hand_saw, dog, rooster, pig, cow, frog, cat, hen, insects, sheep, crow, rain, sea_waves, crackling_fire, crickets, chirping_birds, water_drops, wind, pouring_water, toilet_flush, thunderstorm]
+    class_mapping:
+      siren: ALARM
+      glass_breaking: EXPLOSION
+      fireworks: EXPLOSION
+      crackling_fire: FIRE_AUDIO
+    task: classification
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "Mel-spectrogram 128 bins, 22050 Hz"
+    why_relevant: "Additional alarm and explosion-adjacent sounds"
+    limitations: "No dedicated gunshot class; some mappings are approximate"
+    status: PLANNED
+
+  # ================================================================
+  # TEXT DATASETS
+  # ================================================================
+  - name: "Emergency vs Non-Emergency Tweet Classification"
+    modality: text
+    source_url: "https://www.kaggle.com/datasets/landlord/nlp-with-disaster-tweets"
+    classes_raw: [1, 0]
+    class_mapping:
+      1: EMERGENCY
+      0: NON_EMERGENCY
+    task: classification
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "Clean URLs, hashtags; tokenize with DistilBERT tokenizer"
+    why_relevant: "Direct emergency vs non-emergency text classification"
+    limitations: "Twitter-domain only; may not generalise to formal reports"
+    status: PLANNED
+
+  - name: "CrisisNLP"
+    modality: text
+    source_url: "https://crisisnlp.qcri.org/"
+    classes_raw: [affected_individuals, caution_advice, displaced_people, donation_needs, infrastructure_damage, injured_trapped, missing_trapped, personal, relevant_information, sympathy_support, not_applicable, other_useful]
+    class_mapping:
+      affected_individuals: EMERGENCY
+      injured_trapped: EMERGENCY
+      missing_trapped: EMERGENCY
+      infrastructure_damage: HIGH_URGENCY
+      caution_advice: HIGH_URGENCY
+      not_applicable: NON_EMERGENCY
+    task: classification
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "DistilBERT tokenizer, max_length=128"
+    why_relevant: "Crisis-specific text covering real emergency scenarios"
+    limitations: "Requires category-to-urgency mapping"
+    status: PLANNED
+
+  # ================================================================
+  # SENSOR DATA
+  # ================================================================
+  - name: "Synthetic IoT Sensor Data (rule-based generation)"
+    modality: sensor
+    source_url: "internal — scripts/generate_sensor_data.py"
+    classes_raw: [NORMAL, MOTION_ANOMALY, TEMPERATURE_ANOMALY, SMOKE_ANOMALY]
+    class_mapping:
+      NORMAL: NORMAL
+      MOTION_ANOMALY: MOTION_ANOMALY
+      TEMPERATURE_ANOMALY: TEMPERATURE_ANOMALY
+      SMOKE_ANOMALY: SMOKE_ANOMALY
+    task: anomaly_detection
+    split: {train: 0.70, val: 0.15, test: 0.15}
+    preprocessing: "Standardize features; encode PIR as binary"
+    why_relevant: "No public dataset exactly matches our sensor schema; synthetic data + rule-based thresholds used for Phase 5"
+    limitations: "Synthetic — may not reflect all real IoT noise patterns"
+    status: PLANNED
+
+  # ================================================================
+  # NOT USED — documented with reason
+  # ================================================================
+  - name: "MNIST / CIFAR-10"
+    modality: video
+    status: NOT_USED_CLASS_MISMATCH
+    reason: "Generic image classification — no public-safety classes"
+
+  - name: "SQuAD (QA dataset)"
+    modality: text
+    status: NOT_USED_CLASS_MISMATCH
+    reason: "Question answering task — unrelated to emergency classification"
