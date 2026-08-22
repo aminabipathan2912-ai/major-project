@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+numpy
+opencv-python
+pillow
+torch
+torchvision
+pytest

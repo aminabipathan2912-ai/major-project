@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+
+
+# Local dataset caches from training experiments
+/training/**/data/
+/training/**/cache/
+
+# OS/editor
+.vscode/
+.idea/
+*.suo
+*.user
+*.log
+
+# Env
+.env

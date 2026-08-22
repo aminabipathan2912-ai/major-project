@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CCTV monitor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="kicker">Demo monitor</p>
+        <h1>Accident and violence detection</h1>
+      </div>
+      <p class="note">This page is only for testing. The product is the camera pipeline.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel player-panel">
+        <div class="panel-head">
+          <h2>Source</h2>
+          <p id="sourceLabel" class="muted">Loading…</p>
+        </div>
+        <div class="stage">
+          <video id="filePlayer" controls playsinline preload="metadata" hidden></video>
+          <img id="liveView" alt="Live decoded frames" hidden />
+          <p id="playerHint" class="hint">Waiting for video…</p>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <h2>Models</h2>
+          <ul id="models" class="models"></ul>
+        </section>
+
+        <section class="panel">
+          <h2>Latest readout</h2>
+          <div id="readout" class="readout">
+            <p class="muted">No predictions yet.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Verified events</h2>
+            <button type="button" id="refreshBtn">Refresh status</button>
+          </div>
+          <ol id="events" class="events">
+            <li class="muted">None yet. Events appear only after repeated high-confidence detections.</li>
+          </ol>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
