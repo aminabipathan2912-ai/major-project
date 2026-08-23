@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""
     TWILIO_TO_NUMBER: str = ""
-    # `trial-template` uses Twilio's permitted trial speech-recognition URL.
-    # `custom` is the full Sarvam audio + acknowledgement webhook flow.
-    TWILIO_CALL_MODE: Literal["custom", "trial-template"] = "custom"
+    # `trial-template` uses Twilio's hosted sample message. `trial-custom`
+    # uses this application's TwiML endpoint with only trial-safe Call API
+    # parameters. `custom` adds paid-account call-progress callbacks.
+    TWILIO_CALL_MODE: Literal["custom", "trial-template", "trial-custom"] = "custom"
     TWILIO_TRIAL_TEMPLATE_URL: str = (
         "https://webhooks.twilio.com/v1/Voice/Template/voice_speech_recognition"
     )

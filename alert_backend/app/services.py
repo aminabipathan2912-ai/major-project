@@ -68,6 +68,11 @@ def place_call(settings: Settings, incident_id: str, call_id: str) -> str:
         # Match Twilio's restricted-trial call example exactly: no dynamic URL,
         # method override, or custom status callback parameters.
         request["url"] = settings.TWILIO_TRIAL_TEMPLATE_URL
+    elif settings.TWILIO_CALL_MODE == "trial-custom":
+        # Twilio's current Voice trial supports custom TwiML, including the
+        # <Say>, <Play>, and <Gather> verbs used by this endpoint. Keep the
+        # initial call request minimal; Twilio uses POST by default.
+        request["url"] = f"{base}/twilio/voice/{incident_id}"
     else:
         request["url"] = f"{base}/twilio/voice/{incident_id}"
         request["method"] = "POST"
