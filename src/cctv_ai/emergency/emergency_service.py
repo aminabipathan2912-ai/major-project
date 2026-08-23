@@ -34,6 +34,7 @@ class RemoteEmergencyProvider(EmergencyProvider):
         self._token = settings.ALERT_BACKEND_TOKEN
         self._location = settings.INCIDENT_LOCATION
         self._latest_incident_id: str | None = None
+        self._latest_delivery_state: str | None = None
 
     async def on_verified_emergency(self, event: VerifiedEvent) -> None:
         if not self._url or not self._token:
@@ -58,12 +59,21 @@ class RemoteEmergencyProvider(EmergencyProvider):
                 response.raise_for_status()
                 body = response.json()
                 self._latest_incident_id = body.get("incident_id")
+                self._latest_delivery_state = body.get("delivery_state")
             print(f"[ALERT_BACKEND] event sent: {event.event_type} {event.confidence:.3f}")
         except httpx.HTTPStatusError as exc:
             # The hosted backend returns safe operational details (such as a
             # Twilio error code) so the local operator can diagnose a failed
             # escalation without needing access to its Render logs.
             detail = exc.response.text.strip()
+            try:
+                body = exc.response.json()
+                failure = body.get("detail", {})
+                if isinstance(failure, dict):
+                    self._latest_incident_id = failure.get("incident_id")
+                    self._latest_delivery_state = failure.get("delivery_state", "call_failed")
+            except ValueError:
+                pass
             print(
                 f"[ALERT_BACKEND] delivery failed: HTTP {exc.response.status_code} "
                 f"{detail[:800]}"
@@ -82,7 +92,10 @@ class RemoteEmergencyProvider(EmergencyProvider):
                     headers={"Authorization": f"Bearer {self._token}"},
                 )
                 response.raise_for_status()
-                return response.json()
+                incident = response.json()
+                if self._latest_delivery_state:
+                    incident["delivery_state"] = self._latest_delivery_state
+                return incident
         except httpx.HTTPError as exc:
             print(f"[ALERT_BACKEND] status lookup failed: {exc}")
             return None

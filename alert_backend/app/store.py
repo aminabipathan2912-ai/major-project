@@ -76,7 +76,7 @@ class IncidentStore:
             cur.execute("SELECT * FROM incidents WHERE id = %s", (incident_id,))
             return cur.fetchone()
 
-    def get_active_incident(self, camera_id: str) -> dict[str, Any] | None:
+    def get_active_incident(self, camera_id: str, max_age_sec: int) -> dict[str, Any] | None:
         """Return an incident that is still being handled for this camera.
 
         This is a server-side safety guard. Event keys include a timestamp, so
@@ -93,11 +93,13 @@ class IncidentStore:
             cur.execute(
                 """
                 SELECT * FROM incidents
-                WHERE camera_id = %s AND status = ANY(%s)
+                WHERE camera_id = %s
+                  AND status = ANY(%s)
+                  AND created_at >= now() - (%s * INTERVAL '1 second')
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                (camera_id, list(active_statuses)),
+                (camera_id, list(active_statuses), max(1, int(max_age_sec))),
             )
             return cur.fetchone()
 

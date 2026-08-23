@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     CAMERA_SOURCE: str = "tests/fixtures/sample.mp4"
     CAMERA_ID: str = "camera-1"
     INCIDENT_LOCATION: str = "Main Road, test site"
+    # Uploaded/test clips should behave like a camera feed: play once at the
+    # source FPS instead of racing through and repeatedly retriggering alerts.
+    FILE_LOOP: bool = False
+    FILE_REALTIME: bool = True
 
     INFERENCE_INTERVAL_MS: int = 1000
     CLIP_FRAME_COUNT: int = 8

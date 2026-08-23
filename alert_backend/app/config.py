@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     TWILIO_TRIAL_TEMPLATE_URL: str = (
         "https://webhooks.twilio.com/v1/Voice/Template/voice_speech_recognition"
     )
+    # A completed/abandoned trial call must not leave a camera blocked forever.
+    ACTIVE_INCIDENT_TIMEOUT_SEC: int = 120
 
     SARVAM_API_KEY: str = ""
     SARVAM_TTS_URL: str = "https://api.sarvam.ai/text-to-speech"

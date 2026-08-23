@@ -36,6 +36,7 @@ class OpenCVCameraWorker:
         frame_buffer: FrameBuffer,
         reconnect_backoff_sec: float = 5.0,
         loop_file: bool = True,
+        realtime_file: bool = True,
         target_grab_fps: float | None = None,
         cap_buffer_size: int | None = None,
     ) -> None:
@@ -44,6 +45,7 @@ class OpenCVCameraWorker:
         self._frame_buffer = frame_buffer
         self._reconnect_backoff_sec = float(reconnect_backoff_sec)
         self._loop_file = loop_file
+        self._realtime_file = realtime_file
         self._target_grab_fps = target_grab_fps
         self._cap_buffer_size = cap_buffer_size
 
@@ -126,13 +128,19 @@ class OpenCVCameraWorker:
                     time.sleep(self._reconnect_backoff_sec)
                     continue
 
+                grab_fps = self._target_grab_fps
+                if self._source_type == "file" and self._realtime_file and not grab_fps:
+                    source_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0)
+                    # Some codecs do not expose FPS; retain a sensible pace
+                    # instead of returning to an unbounded decode loop.
+                    grab_fps = source_fps if 1.0 <= source_fps <= 120.0 else 25.0
                 next_grab_deadline = 0.0
                 while not self._stop_event.is_set():
-                    if self._target_grab_fps is not None and self._target_grab_fps > 0:
+                    if grab_fps is not None and grab_fps > 0:
                         now = time.time()
                         if now < next_grab_deadline:
                             time.sleep(next_grab_deadline - now)
-                        next_grab_deadline = time.time() + (1.0 / self._target_grab_fps)
+                        next_grab_deadline = time.time() + (1.0 / grab_fps)
 
                     ret, frame = cap.read()
                     if not ret or frame is None:

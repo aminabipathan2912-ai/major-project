@@ -41,6 +41,8 @@ class PipelineService:
             source_type=self._active_source_type,
             source=self._active_source,
             frame_buffer=self._frame_buffer,
+            loop_file=settings.FILE_LOOP,
+            realtime_file=settings.FILE_REALTIME,
         )
 
         self._accident_model, self._violence_model, self._audio_model = create_models(settings)
@@ -254,13 +256,14 @@ class PipelineService:
                     verified = None
 
                 if verified is not None:
-                    # Broadcast to every open dashboard, rather than letting
-                    # old browser tabs compete for a single queue item.
-                    await self._broadcast_verified_event(verified)
-                    # Then perform emergency provider action (voice/notification reserved)
+                    # Finish escalation first, so every dashboard receives the
+                    # event with the matching alert state already available.
                     try:
                         await self._emergency_provider.on_verified_emergency(verified)
                     except Exception as e:
                         print(f"[EMERGENCY] provider error: {e}")
+                    # Broadcast to every open dashboard, rather than letting
+                    # old browser tabs compete for a single queue item.
+                    await self._broadcast_verified_event(verified)
 
             await asyncio.sleep(interval_s)

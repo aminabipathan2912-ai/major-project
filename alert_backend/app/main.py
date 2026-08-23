@@ -71,7 +71,11 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
     event_data = event.model_dump()
     message = emergency_message(event_data)
     store: IncidentStore = app.state.store
-    active_incident = await asyncio.to_thread(store.get_active_incident, event.camera_id)
+    active_incident = await asyncio.to_thread(
+        store.get_active_incident,
+        event.camera_id,
+        settings.ACTIVE_INCIDENT_TIMEOUT_SEC,
+    )
     if active_incident:
         # Never start overlapping calls for the same camera. The caller still
         # receives this incident id, letting the dashboard show the call that
@@ -80,12 +84,18 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
             "ok": True,
             "duplicate": True,
             "active": True,
+            "delivery_state": "already_active",
             "incident_id": str(active_incident["id"]),
             "call_started": False,
         }
     incident, created = await asyncio.to_thread(store.create_incident, event_data, message)
     if not created:
-        return {"ok": True, "duplicate": True, "incident_id": str(incident["id"])}
+        return {
+            "ok": True,
+            "duplicate": True,
+            "delivery_state": "duplicate",
+            "incident_id": str(incident["id"]),
+        }
 
     audio_filename = None
     try:
@@ -100,7 +110,12 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
 
     if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER and settings.TWILIO_TO_NUMBER):
         await asyncio.to_thread(store.update_incident, str(incident["id"]), status="CALL_NOT_CONFIGURED")
-        return {"ok": True, "incident_id": str(incident["id"]), "call_started": False}
+        return {
+            "ok": True,
+            "incident_id": str(incident["id"]),
+            "call_started": False,
+            "delivery_state": "not_configured",
+        }
 
     call = await asyncio.to_thread(store.create_call, str(incident["id"]), settings.TWILIO_TO_NUMBER)
     try:
@@ -123,8 +138,21 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
             call["id"],
             exc,
         )
-        raise HTTPException(status_code=502, detail=f"Twilio call could not be started: {exc}") from exc
-    return {"ok": True, "incident_id": str(incident["id"]), "call_started": True, "audio": bool(audio_filename)}
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": f"Twilio call could not be started: {exc}",
+                "incident_id": str(incident["id"]),
+                "delivery_state": "call_failed",
+            },
+        ) from exc
+    return {
+        "ok": True,
+        "incident_id": str(incident["id"]),
+        "call_started": True,
+        "delivery_state": "call_started",
+        "audio": bool(audio_filename),
+    }
 
 
 @app.get("/api/incidents/{incident_id}")
@@ -164,7 +192,7 @@ async def acknowledge(incident_id: str, request: Request):
             acknowledged_at=datetime.now(timezone.utc),
         )
         return xml(say_twiml("Acknowledgement received. The incident has been reported."))
-    await asyncio.to_thread(store.update_incident, incident_id, status="NO_ACKNOWLEDGEMENT")
+    await asyncio.to_thread(app.state.store.update_incident, incident_id, status="NO_ACKNOWLEDGEMENT")
     return xml(say_twiml("Acknowledgement was not recognized. The call will now end."))
 
 

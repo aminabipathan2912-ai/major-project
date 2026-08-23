@@ -117,7 +117,17 @@ function renderIncident(incident) {
   incidentBanner.hidden = false;
   incidentBanner.className = "banner";
   const status = (incident.status || "").toUpperCase();
-  if (status === "REPORTED") {
+  const deliveryState = (incident.delivery_state || "").toLowerCase();
+  if (deliveryState === "already_active") {
+    incidentBanner.classList.add("waiting");
+    incidentTitle.textContent = "CALL ALREADY ACTIVE — NO NEW CALL";
+  } else if (deliveryState === "call_failed") {
+    incidentBanner.classList.add("detected");
+    incidentTitle.textContent = "CALL FAILED";
+  } else if (deliveryState === "not_configured") {
+    incidentBanner.classList.add("detected");
+    incidentTitle.textContent = "CALL NOT CONFIGURED";
+  } else if (status === "REPORTED") {
     incidentBanner.classList.add("reported");
     incidentTitle.textContent = "ACCIDENT REPORTED";
   } else if (status === "AWAITING_ACKNOWLEDGEMENT") {
@@ -201,7 +211,10 @@ refreshStatus();
 setInterval(refreshStatus, STATUS_REFRESH_MS);
 
 const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/events");
-ws.onmessage = (ev) => {
+ws.onmessage = async (ev) => {
+  // The server has already finished the remote escalation before publishing
+  // this event. Refresh first so readout and incident state stay in sync.
+  await refreshStatus();
   events.unshift(JSON.parse(ev.data));
   events = events.slice(0, MAX_VISIBLE_EVENTS);
   renderEvents();
