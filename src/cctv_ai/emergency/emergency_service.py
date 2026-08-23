@@ -56,6 +56,15 @@ class RemoteEmergencyProvider(EmergencyProvider):
                 )
                 response.raise_for_status()
             print(f"[ALERT_BACKEND] event sent: {event.event_type} {event.confidence:.3f}")
+        except httpx.HTTPStatusError as exc:
+            # The hosted backend returns safe operational details (such as a
+            # Twilio error code) so the local operator can diagnose a failed
+            # escalation without needing access to its Render logs.
+            detail = exc.response.text.strip()
+            print(
+                f"[ALERT_BACKEND] delivery failed: HTTP {exc.response.status_code} "
+                f"{detail[:800]}"
+            )
         except httpx.HTTPError as exc:
             print(f"[ALERT_BACKEND] delivery failed: {exc}")
 

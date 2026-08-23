@@ -85,4 +85,3 @@ class TemporalVerifier:
                 "cooldown_sec": self._config.cooldown_sec,
             },
         )
-

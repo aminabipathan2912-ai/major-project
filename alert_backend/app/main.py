@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from .services import alert_twiml, emergency_message, is_acknowledgement, place_
 from .store import IncidentStore
 
 AUDIO_DIR = Path("data/audio")
+logger = logging.getLogger("cctv_alert_backend")
 
 
 def xml(content: str) -> Response:
@@ -81,6 +83,7 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
             await asyncio.to_thread(store.update_incident, str(incident["id"]), audio_filename=candidate)
     except Exception as exc:
         await asyncio.to_thread(store.update_incident, str(incident["id"]), status="TTS_FAILED")
+        logger.exception("Sarvam TTS failed for incident %s: %s", incident["id"], exc)
         raise HTTPException(status_code=502, detail=f"Sarvam TTS failed: {exc}") from exc
 
     if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER and settings.TWILIO_TO_NUMBER):
@@ -95,7 +98,15 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
     except Exception as exc:
         await asyncio.to_thread(store.update_call, str(call["id"]), status="failed", last_error=str(exc))
         await asyncio.to_thread(store.update_incident, str(incident["id"]), status="CALL_FAILED")
-        raise HTTPException(status_code=502, detail="Twilio call could not be started") from exc
+        # Render logs get Twilio's precise code/message. We deliberately do not
+        # log credentials or the full request payload.
+        logger.exception(
+            "Twilio call start failed for incident %s, call %s: %s",
+            incident["id"],
+            call["id"],
+            exc,
+        )
+        raise HTTPException(status_code=502, detail=f"Twilio call could not be started: {exc}") from exc
     return {"ok": True, "incident_id": str(incident["id"]), "call_started": True, "audio": bool(audio_filename)}
 
 

@@ -1,58 +1,12 @@
 :root {
-<<<<<<< ours
-  --bg: #f3f1ec;
-  --paper: #fffcf7;
-  --ink: #1c1917;
-  --muted: #57534e;
-  --line: #d6d3cd;
-  --accent: #3f4a43;
-  --ok: #3d5c45;
-  --warn: #8a5a32;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font: 16px/1.5 "Segoe UI", system-ui, sans-serif;
-}
-
-.top {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 28px 24px 8px;
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: flex-end;
-}
-
-.kicker {
-  margin: 0 0 4px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-h1 {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-=======
   --bg: #fff4d6;
   --paper: #fffdf7;
   --ink: #101010;
   --muted: #4c4a45;
   --yellow: #ffd52a;
   --lime: #a9ed38;
+  --pink: #ff7b9f;
+  --blue: #70b9ff;
   --orange: #ff9c3d;
   --shadow: 7px 7px 0 var(--ink);
   --small-shadow: 4px 4px 0 var(--ink);
@@ -61,8 +15,8 @@ h1 {
 * { box-sizing: border-box; }
 
 html, body {
-  min-height: 100%;
   margin: 0;
+  min-height: 100%;
   background: var(--bg);
   color: var(--ink);
   font: 16px/1.35 Arial, Helvetica, sans-serif;
@@ -103,126 +57,10 @@ h1 {
   font-weight: 900;
   line-height: .98;
   letter-spacing: -.06em;
->>>>>>> theirs
 }
 
 h2 {
   margin: 0;
-<<<<<<< ours
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.note,
-.muted,
-.hint {
-  color: var(--muted);
-}
-
-[hidden] {
-  display: none !important;
-}
-
-.note {
-  max-width: 280px;
-  margin: 0;
-  font-size: 13px;
-}
-
-.banner {
-  max-width: 1100px;
-  margin: 12px auto 0;
-  padding: 16px 20px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--paper);
-}
-
-.banner.detected {
-  border-color: #ead9c8;
-  background: #f7f0e8;
-}
-
-.banner.waiting {
-  border-color: #d6d3cd;
-}
-
-.banner.reported {
-  border-color: #c9d6cc;
-  background: #eef3ef;
-}
-
-.banner p {
-  margin: 0;
-}
-
-#incidentTitle {
-  font-size: 20px;
-  font-weight: 650;
-}
-
-.layout {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 16px 24px 40px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
-  gap: 16px;
-}
-
-.panel {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
-}
-
-.panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.upload {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-  align-items: center;
-}
-
-.upload input {
-  flex: 1 1 180px;
-}
-
-.stage {
-  background: #eceae4;
-  border-radius: 8px;
-  min-height: 280px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-video,
-#liveView {
-  width: 100%;
-  max-height: 520px;
-  display: block;
-  background: #111;
-}
-
-.player-actions {
-  margin-top: 12px;
-}
-
-.hint {
-  padding: 24px;
-  text-align: center;
-=======
   font-size: 17px;
   font-weight: 900;
   text-transform: uppercase;
@@ -234,8 +72,8 @@ video,
   margin-top: 20px;
   padding: 15px 18px;
   border: 3px solid var(--ink);
-  background: var(--yellow);
   box-shadow: var(--shadow);
+  background: var(--yellow);
 }
 
 .banner.detected { background: var(--orange); }
@@ -259,6 +97,7 @@ video,
 .panel {
   padding: 18px;
   border: 3px solid var(--ink);
+  border-radius: 0;
   background: var(--paper);
   box-shadow: var(--shadow);
 }
@@ -329,28 +168,11 @@ video, #liveView {
   color: #fff;
   text-align: center;
   font-weight: 700;
->>>>>>> theirs
 }
 
 .side {
   display: flex;
   flex-direction: column;
-<<<<<<< ours
-  gap: 16px;
-}
-
-.models,
-.events {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-}
-
-.models li,
-.event,
-.readout p {
-  margin: 0 0 8px;
-=======
   gap: 22px;
 }
 
@@ -358,63 +180,10 @@ video, #liveView {
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
->>>>>>> theirs
 }
 
 .models li {
   display: flex;
-<<<<<<< ours
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
-}
-
-.badge {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-}
-
-.badge.ok {
-  color: var(--ok);
-  border-color: #c9d6cc;
-  background: #eef3ef;
-}
-
-.badge.warn {
-  color: var(--warn);
-  border-color: #ead9c8;
-  background: #f7f0e8;
-}
-
-.readout {
-  font-size: 14px;
-}
-
-.readout .conf {
-  color: var(--muted);
-}
-
-button {
-  font: inherit;
-  font-size: 13px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-button:hover {
-  background: #f6f4ef;
-}
-
-.events {
-  max-height: 280px;
-=======
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -425,6 +194,7 @@ button:hover {
 
 .badge {
   border: 2px solid var(--ink);
+  border-radius: 0;
   padding: 4px 8px;
   box-shadow: 2px 2px 0 var(--ink);
   font-size: 12px;
@@ -447,6 +217,7 @@ button:hover {
 
 button {
   border: 3px solid var(--ink);
+  border-radius: 0;
   padding: 8px 12px;
   background: var(--yellow);
   color: var(--ink);
@@ -464,45 +235,17 @@ button:active {
   box-shadow: 1px 1px 0 var(--ink);
 }
 
-.events {
-  max-height: 270px;
->>>>>>> theirs
-  overflow: auto;
-}
+.events { max-height: 270px; overflow: auto; }
 
 .event {
-<<<<<<< ours
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-=======
   margin: 0;
   padding: 12px 0;
   border-bottom: 2px solid var(--ink);
->>>>>>> theirs
   font-size: 14px;
 }
 
 .event time {
   display: block;
-<<<<<<< ours
-  color: var(--muted);
-  font-size: 12px;
-}
-
-@media (max-width: 860px) {
-  .top,
-  .layout {
-    display: block;
-  }
-
-  .note {
-    margin-top: 12px;
-  }
-
-  .side {
-    margin-top: 16px;
-  }
-=======
   margin-bottom: 3px;
   font-size: 12px;
   font-weight: 700;
@@ -520,5 +263,4 @@ button:active {
   .upload { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   #sourceLabel { max-width: none; margin-top: 8px; text-align: left; }
->>>>>>> theirs
 }

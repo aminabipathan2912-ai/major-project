@@ -66,7 +66,7 @@ class PipelineService:
 
         self._emergency_provider: EmergencyProvider = create_emergency_provider(settings)
 
-        self._verified_events: asyncio.Queue[VerifiedEvent] = asyncio.Queue()
+        self._event_subscribers: set[asyncio.Queue[VerifiedEvent]] = set()
         self._running = False
         self._last_predictions: dict[str, dict[str, Any] | None] = {
             "accident": None,
@@ -82,9 +82,17 @@ class PipelineService:
         # together.
         self._inference_lock = asyncio.Lock()
 
-    @property
-    def verified_events_queue(self) -> asyncio.Queue[VerifiedEvent]:
-        return self._verified_events
+    def subscribe_verified_events(self) -> asyncio.Queue[VerifiedEvent]:
+        queue: asyncio.Queue[VerifiedEvent] = asyncio.Queue()
+        self._event_subscribers.add(queue)
+        return queue
+
+    def unsubscribe_verified_events(self, queue: asyncio.Queue[VerifiedEvent]) -> None:
+        self._event_subscribers.discard(queue)
+
+    async def _broadcast_verified_event(self, event: VerifiedEvent) -> None:
+        for queue in tuple(self._event_subscribers):
+            await queue.put(event)
 
     @property
     def settings(self) -> Settings:
@@ -246,8 +254,9 @@ class PipelineService:
                     verified = None
 
                 if verified is not None:
-                    # Push to demo listeners first
-                    await self._verified_events.put(verified)
+                    # Broadcast to every open dashboard, rather than letting
+                    # old browser tabs compete for a single queue item.
+                    await self._broadcast_verified_event(verified)
                     # Then perform emergency provider action (voice/notification reserved)
                     try:
                         await self._emergency_provider.on_verified_emergency(verified)

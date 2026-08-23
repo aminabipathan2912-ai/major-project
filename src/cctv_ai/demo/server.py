@@ -136,13 +136,15 @@ def create_app() -> FastAPI:
     async def ws_events(ws: WebSocket):
         await ws.accept()
         pipeline: PipelineService = app.state.pipeline
-        q = pipeline.verified_events_queue
+        q = pipeline.subscribe_verified_events()
         try:
             while True:
                 event = await q.get()
                 await ws.send_text(json.dumps(_to_jsonable(event)))
         except WebSocketDisconnect:
             return
+        finally:
+            pipeline.unsubscribe_verified_events(q)
 
     return app
 
