@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..config import get_settings
 from ..core.pipeline import PipelineService
+from ..emergency.emergency_service import RemoteEmergencyProvider
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -64,6 +65,9 @@ def create_app() -> FastAPI:
             "file_available": pipeline.resolve_video_path() is not None,
             "source_type": pipeline.get_source_info()["source_type"],
         }
+        provider = pipeline.emergency_provider
+        if isinstance(provider, RemoteEmergencyProvider):
+            payload["latest_incident"] = await provider.latest_incident()
         return JSONResponse(content=payload)
 
     @app.post("/api/upload")

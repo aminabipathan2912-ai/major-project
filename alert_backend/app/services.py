@@ -60,14 +60,22 @@ def synthesize_to_file(settings: Settings, text: str, destination: Path) -> bool
 def place_call(settings: Settings, incident_id: str, call_id: str) -> str:
     client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
     base = settings.PUBLIC_BASE_URL.rstrip("/")
+    request: dict = {
+        "to": settings.TWILIO_TO_NUMBER,
+        "from_": settings.TWILIO_FROM_NUMBER,
+        "status_callback": f"{base}/twilio/status/{call_id}",
+        "status_callback_method": "POST",
+        "status_callback_event": ["initiated", "ringing", "answered", "completed"],
+    }
+    if settings.TWILIO_CALL_MODE == "trial-template":
+        # Restricted Twilio trials accept this provider-hosted voice template,
+        # but cannot run the application's dynamic Sarvam/TwiML route.
+        request["url"] = settings.TWILIO_TRIAL_TEMPLATE_URL
+    else:
+        request["url"] = f"{base}/twilio/voice/{incident_id}"
+        request["method"] = "POST"
     call = client.calls.create(
-        to=settings.TWILIO_TO_NUMBER,
-        from_=settings.TWILIO_FROM_NUMBER,
-        url=f"{base}/twilio/voice/{incident_id}",
-        method="POST",
-        status_callback=f"{base}/twilio/status/{call_id}",
-        status_callback_method="POST",
-        status_callback_event=["initiated", "ringing", "answered", "completed"],
+        **request,
     )
     return str(call.sid)
 

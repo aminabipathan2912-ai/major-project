@@ -121,6 +121,12 @@ function renderIncident(incident) {
   } else if (status === "AWAITING_ACKNOWLEDGEMENT") {
     incidentBanner.classList.add("waiting");
     incidentTitle.textContent = "AWAITING ACKNOWLEDGEMENT";
+  } else if (status === "CALL_ANSWERED") {
+    incidentBanner.classList.add("reported");
+    incidentTitle.textContent = "CALL ANSWERED";
+  } else if (status === "CALL_REQUESTED") {
+    incidentBanner.classList.add("waiting");
+    incidentTitle.textContent = "CALL REQUESTED";
   } else {
     incidentBanner.classList.add("detected");
     incidentTitle.textContent = status === "DETECTED" ? "INCIDENT DETECTED" : status;

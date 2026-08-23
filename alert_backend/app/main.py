@@ -94,7 +94,12 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
     try:
         sid = await asyncio.to_thread(place_call, settings, str(incident["id"]), str(call["id"]))
         await asyncio.to_thread(store.update_call, str(call["id"]), twilio_sid=sid, status="initiated")
-        await asyncio.to_thread(store.update_incident, str(incident["id"]), status="AWAITING_ACKNOWLEDGEMENT")
+        initial_status = (
+            "CALL_REQUESTED"
+            if settings.TWILIO_CALL_MODE == "trial-template"
+            else "AWAITING_ACKNOWLEDGEMENT"
+        )
+        await asyncio.to_thread(store.update_incident, str(incident["id"]), status=initial_status)
     except Exception as exc:
         await asyncio.to_thread(store.update_call, str(call["id"]), status="failed", last_error=str(exc))
         await asyncio.to_thread(store.update_incident, str(incident["id"]), status="CALL_FAILED")
@@ -108,6 +113,16 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
         )
         raise HTTPException(status_code=502, detail=f"Twilio call could not be started: {exc}") from exc
     return {"ok": True, "incident_id": str(incident["id"]), "call_started": True, "audio": bool(audio_filename)}
+
+
+@app.get("/api/incidents/{incident_id}")
+async def incident_status(incident_id: str, authorization: str | None = Header(default=None)):
+    """Authenticated status endpoint used by the local dashboard."""
+    assert_ingest_auth(authorization)
+    incident = await asyncio.to_thread(app.state.store.get_incident, incident_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail="incident not found")
+    return incident
 
 
 @app.api_route("/twilio/voice/{incident_id}", methods=["GET", "POST"])
@@ -144,12 +159,22 @@ async def acknowledge(incident_id: str, request: Request):
 async def twilio_status(call_id: str, request: Request):
     form = dict(await request.form())
     await assert_twilio_signature(request, form)
+    call_status = str(form.get("CallStatus") or "unknown").lower()
+    existing = await asyncio.to_thread(app.state.store.get_call, call_id)
     await asyncio.to_thread(
         app.state.store.update_call,
         call_id,
-        status=str(form.get("CallStatus") or "unknown"),
+        status=call_status,
         twilio_sid=str(form.get("CallSid") or ""),
     )
+    # Twilio calls an answered outbound call "in-progress". This means the
+    # phone/voicemail answered, not that a human has acknowledged the incident.
+    if existing and call_status in {"answered", "in-progress"}:
+        await asyncio.to_thread(
+            app.state.store.update_incident,
+            str(existing["incident_id"]),
+            status="CALL_ANSWERED",
+        )
     return Response(status_code=204)
 
 
