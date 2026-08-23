@@ -69,6 +69,10 @@ class PipelineService:
         self._emergency_provider: EmergencyProvider = create_emergency_provider(settings)
 
         self._event_subscribers: set[asyncio.Queue[VerifiedEvent]] = set()
+        # A recorded clip is one review session, not a live camera. Once an
+        # incident type has escalated from that clip, do not call again for a
+        # later overlapping window in the same video.
+        self._file_escalated_event_types: set[str] = set()
         self._running = False
         self._last_predictions: dict[str, dict[str, Any] | None] = {
             "accident": None,
@@ -136,6 +140,7 @@ class PipelineService:
     def switch_to_uploaded_file(self, path: str) -> None:
         self._active_source_type = "file"
         self._active_source = path
+        self._file_escalated_event_types.clear()
         self._camera_worker.restart_with(source_type="file", source=path)
 
     def get_status(self) -> PipelineStatus:
@@ -256,6 +261,15 @@ class PipelineService:
                     verified = None
 
                 if verified is not None:
+                    if (
+                        self._active_source_type == "file"
+                        and verified.event_type in self._file_escalated_event_types
+                    ):
+                        # Later windows from the same recording are expected
+                        # to overlap. Suppress a second call for the same
+                        # incident type without changing live-camera behavior.
+                        await asyncio.sleep(interval_s)
+                        continue
                     # Show a verified event immediately. Escalation may wait
                     # on a remote service, but must not delay the event feed.
                     await self._broadcast_verified_event(verified)
@@ -263,5 +277,7 @@ class PipelineService:
                         await self._emergency_provider.on_verified_emergency(verified)
                     except Exception as e:
                         print(f"[EMERGENCY] provider error: {e}")
+                    if self._active_source_type == "file":
+                        self._file_escalated_event_types.add(verified.event_type)
 
             await asyncio.sleep(interval_s)
