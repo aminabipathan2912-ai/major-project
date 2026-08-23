@@ -127,6 +127,9 @@ function renderIncident(incident) {
   } else if (status === "CALL_REQUESTED") {
     incidentBanner.classList.add("waiting");
     incidentTitle.textContent = "CALL REQUESTED";
+  } else if (status === "TRIAL_CALL_STARTED") {
+    incidentBanner.classList.add("waiting");
+    incidentTitle.textContent = "TWILIO TRIAL CALL STARTED";
   } else {
     incidentBanner.classList.add("detected");
     incidentTitle.textContent = status === "DETECTED" ? "INCIDENT DETECTED" : status;

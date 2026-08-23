@@ -63,17 +63,17 @@ def place_call(settings: Settings, incident_id: str, call_id: str) -> str:
     request: dict = {
         "to": settings.TWILIO_TO_NUMBER,
         "from_": settings.TWILIO_FROM_NUMBER,
-        "status_callback": f"{base}/twilio/status/{call_id}",
-        "status_callback_method": "POST",
-        "status_callback_event": ["initiated", "ringing", "answered", "completed"],
     }
     if settings.TWILIO_CALL_MODE == "trial-template":
-        # Restricted Twilio trials accept this provider-hosted voice template,
-        # but cannot run the application's dynamic Sarvam/TwiML route.
+        # Match Twilio's restricted-trial call example exactly: no dynamic URL,
+        # method override, or custom status callback parameters.
         request["url"] = settings.TWILIO_TRIAL_TEMPLATE_URL
     else:
         request["url"] = f"{base}/twilio/voice/{incident_id}"
         request["method"] = "POST"
+        request["status_callback"] = f"{base}/twilio/status/{call_id}"
+        request["status_callback_method"] = "POST"
+        request["status_callback_event"] = ["initiated", "ringing", "answered", "completed"]
     call = client.calls.create(
         **request,
     )

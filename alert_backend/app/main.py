@@ -95,7 +95,7 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
         sid = await asyncio.to_thread(place_call, settings, str(incident["id"]), str(call["id"]))
         await asyncio.to_thread(store.update_call, str(call["id"]), twilio_sid=sid, status="initiated")
         initial_status = (
-            "CALL_REQUESTED"
+            "TRIAL_CALL_STARTED"
             if settings.TWILIO_CALL_MODE == "trial-template"
             else "AWAITING_ACKNOWLEDGEMENT"
         )
