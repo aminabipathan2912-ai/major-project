@@ -10,6 +10,7 @@ from ..camera.frame_buffer import FrameBuffer
 from ..config import Settings
 from ..core.models import ModelPrediction, ModelStatus, VerifiedEvent
 from ..emergency.emergency_service import EmergencyProvider, create_emergency_provider
+from ..emergency.store import IncidentStore
 from ..event_engine.verifier import TemporalVerificationConfig, TemporalVerifier
 from ..inference.loader import create_models
 
@@ -20,6 +21,7 @@ class PipelineStatus:
     models: dict[str, ModelStatus]
     verification: dict[str, Any]
     last_predictions: dict[str, Any]
+    latest_incident: dict[str, Any] | None
     running: bool
 
 
@@ -61,7 +63,10 @@ class PipelineService:
             )
         )
 
-        self._emergency_provider: EmergencyProvider = create_emergency_provider(settings)
+        self._incident_store = IncidentStore(settings.INCIDENT_DB_PATH)
+        self._emergency_provider: EmergencyProvider = create_emergency_provider(
+            settings, self._incident_store
+        )
 
         self._verified_events: asyncio.Queue[VerifiedEvent] = asyncio.Queue()
         self._running = False
@@ -77,6 +82,18 @@ class PipelineService:
     @property
     def verified_events_queue(self) -> asyncio.Queue[VerifiedEvent]:
         return self._verified_events
+
+    @property
+    def incident_store(self) -> IncidentStore:
+        return self._incident_store
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
+
+    @property
+    def emergency_provider(self) -> EmergencyProvider:
+        return self._emergency_provider
 
     def get_latest_frame_bgr(self):
         """
@@ -128,6 +145,7 @@ class PipelineService:
                 "violence_last_verified_epoch_s": self._violence_verifier.last_verified_epoch_s,
             },
             last_predictions=self._last_predictions,
+            latest_incident=self._incident_store.latest_incident(),
             running=self._running,
         )
 

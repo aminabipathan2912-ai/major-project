@@ -1,23 +1,62 @@
 # CCTV Accident & Violence Detection App
 
-## Is the building done?
+Verified detection can trigger **Sarvam TTS** and a **Twilio outbound call**. You say **Done**; the dashboard switches to **ACCIDENT REPORTED**.
 
-**Yes — the application infrastructure is done.**
+There is no two-way AI conversation. Official police/ambulance emergency numbers are **not** dialed. Use your own test/operator numbers.
 
-That means the camera pipeline, model plug-in points, event verification, emergency hook, and demo page are built and working.
+## Hosted test (required for Twilio)
 
-**What is NOT done yet (by design):**
-- Real AI model training
-- Real accident/violence detection from video
-- Real emergency phone calls
+You only host the **Python backend**. There is no separate frontend app.
 
-Those come later, after you train models separately and plug them in.
+`PUBLIC_BASE_URL` is still required because **Twilio’s cloud** (not your browser) must HTTP-call that backend:
 
-Right now the app will:
-- read a camera / video file
-- show live frames on the demo page
-- clearly say **models are not loaded**
-- **never fake** accident or fight detections
+- fetch TwiML (`/twilio/voice/...`) when the call connects
+- download the Sarvam audio (`/audio/...`)
+- POST what you said (`/twilio/acknowledge/...`)
+
+Localhost is invisible to Twilio. The demo page at `/` is optional and ships with the same backend.
+
+**Numbers:** one Twilio from-number, one to-number (your phone). Not 100/108/112.
+
+1. Fill `.env`:
+   - `PUBLIC_BASE_URL=https://your-backend.onrender.com` (no trailing slash)
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_FROM_NUMBER`
+   - `TWILIO_TO_NUMBER`
+   - `SARVAM_API_KEY`
+   - `EMERGENCY_MODE=voice`
+   - `CAMERA_SOURCE=...`
+   - `INCIDENT_LOCATION=...`
+2. Host this FastAPI app with those env vars.
+3. Trigger a verified detection.
+4. Your `TWILIO_TO_NUMBER` rings. Say **Done**.
+5. Incident status becomes **REPORTED**.
+
+If Sarvam fails, Twilio still speaks a fallback `<Say>` of the same text.
+
+### Twilio console
+- Voice webhook URLs are generated automatically: `/twilio/voice/{incident_id}`
+- Status: `/twilio/status/{call_id}`
+- Speech result: `/twilio/acknowledge/{incident_id}`
+- Audio: `/audio/{incident_id}.wav`
+
+### Local run (pipeline only)
+
+`python run_demo_server.py` still works for video/models. Voice calling needs `PUBLIC_BASE_URL` on a hosted deployment.
+
+---
+
+## Flow
+
+```
+Video → accident/violence models → temporal verifier
+     → incident (DETECTED)
+     → Sarvam TTS
+     → Twilio call to your test phone
+     → you say Done
+     → status REPORTED → dashboard: ACCIDENT REPORTED
+```
 
 ---
 
@@ -47,7 +86,7 @@ The product flow is:
 2. Frames are buffered
 3. AI models look for accidents or fighting
 4. A verification layer checks if the detection is strong and repeated
-5. Only then an emergency event can be triggered (future voice/call integration)
+5. Only then an emergency incident can be created (Sarvam + Twilio on hosted deploy)
 
 ```
 Pre-recorded video (default) / Webcam / RTSP
@@ -58,7 +97,7 @@ Pre-recorded video (default) / Webcam / RTSP
         ↓
  Temporal Event Verification
         ↓
- Emergency Hook (future voice/notification)
+ Incident + Sarvam TTS + Twilio (hosted)
 ```
 
 The web page at `http://localhost:8000` is only a **demo/testing screen**.  
@@ -301,10 +340,8 @@ See `training/README.md` for how the notebooks produced these files.
 
 | Question | Answer |
 |---|---|
-| Is building done? | **Yes, infrastructure is done** |
-| Are AI models ready? | **No, not yet** |
-| Why does sample.mp4 look fake? | It is a placeholder test video, not fight footage |
-| Should I upload a fight video now? | Only if you want to preview video playback; detection needs trained models first |
+| How do I test the phone alert? | Host the app, set `PUBLIC_BASE_URL` + Twilio/Sarvam keys, use your test number |
+| Can it call real 100/108/112? | **No.** Test/operator numbers only |
 | Is the dashboard the main product? | **No** — the pipeline is the product |
 
 Build first. Train models next. Plug them in after.

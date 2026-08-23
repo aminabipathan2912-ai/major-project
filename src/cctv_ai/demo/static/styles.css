@@ -65,6 +65,38 @@ h2 {
   font-size: 13px;
 }
 
+.banner {
+  max-width: 1100px;
+  margin: 12px auto 0;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.banner.detected {
+  border-color: #ead9c8;
+  background: #f7f0e8;
+}
+
+.banner.waiting {
+  border-color: #d6d3cd;
+}
+
+.banner.reported {
+  border-color: #c9d6cc;
+  background: #eef3ef;
+}
+
+.banner p {
+  margin: 0;
+}
+
+#incidentTitle {
+  font-size: 20px;
+  font-weight: 650;
+}
+
 .layout {
   max-width: 1100px;
   margin: 0 auto;

@@ -8,3 +8,6 @@ pillow
 torch
 torchvision
 pytest
+httpx
+twilio
+python-multipart

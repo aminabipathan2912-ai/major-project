@@ -6,6 +6,9 @@ const modelsEl = document.getElementById("models");
 const readoutEl = document.getElementById("readout");
 const eventsEl = document.getElementById("events");
 const refreshBtn = document.getElementById("refreshBtn");
+const incidentBanner = document.getElementById("incidentBanner");
+const incidentTitle = document.getElementById("incidentTitle");
+const incidentMeta = document.getElementById("incidentMeta");
 
 let events = [];
 let usingFilePlayer = false;
@@ -78,6 +81,38 @@ function renderEvents() {
     .join("");
 }
 
+function renderIncident(incident) {
+  if (!incident) {
+    incidentBanner.hidden = true;
+    return;
+  }
+  incidentBanner.hidden = false;
+  incidentBanner.className = "banner";
+  const status = (incident.status || "").toUpperCase();
+  if (status === "REPORTED") {
+    incidentBanner.classList.add("reported");
+    incidentTitle.textContent = "ACCIDENT REPORTED";
+  } else if (status === "AWAITING_ACKNOWLEDGEMENT") {
+    incidentBanner.classList.add("waiting");
+    incidentTitle.textContent = "AWAITING ACKNOWLEDGEMENT";
+  } else {
+    incidentBanner.classList.add("detected");
+    incidentTitle.textContent = status === "DETECTED" ? "INCIDENT DETECTED" : status;
+  }
+  const conf = incident.confidence != null ? `${(incident.confidence * 100).toFixed(1)}%` : "";
+  incidentMeta.textContent = [
+    incident.id,
+    incident.event_type,
+    incident.location,
+    incident.camera_id,
+    fmtTime(incident.timestamp_epoch_s),
+    conf,
+    incident.speech_result ? `heard: ${incident.speech_result}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 async function refreshStatus() {
   const res = await fetch("/api/status");
   const data = await res.json();
@@ -90,6 +125,7 @@ async function refreshStatus() {
 
   renderModels(data.models || {});
   renderReadout(data.last_predictions || {});
+  renderIncident(data.latest_incident);
 
   if (data.playback && data.playback.file_available && cam.source_type === "file" && !usingFilePlayer && !filePlayer.src) {
     showFilePlayer();
