@@ -30,29 +30,11 @@ class Settings(BaseSettings):
     ACCIDENT_MODEL_WEIGHTS_PATH: str = "models/accident_best.pt"
     VIOLENCE_MODEL_WEIGHTS_PATH: str = "models/violence_best.pt"
 
-    # log-only: print only. voice: Sarvam TTS + Twilio call (test numbers only).
-    EMERGENCY_MODE: Literal["log-only", "voice"] = "log-only"
+    # remote posts verified events to the lightweight hosted alert backend.
+    EMERGENCY_MODE: Literal["log-only", "remote"] = "log-only"
+    ALERT_BACKEND_URL: str = ""
+    ALERT_BACKEND_TOKEN: str = ""
 
-    # Public HTTPS origin after you host (no trailing slash). Required for Twilio Play/Gather.
-    PUBLIC_BASE_URL: str = ""
-
-    # Twilio
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_FROM_NUMBER: str = ""
-    # Single destination phone in E.164, e.g. +91XXXXXXXXXX. Not 100/108/112.
-    TWILIO_TO_NUMBER: str = ""
-    TWILIO_CALL_RETRY_MAX: int = 2
-
-    # Sarvam TTS (Bulbul)
-    SARVAM_API_KEY: str = ""
-    SARVAM_TTS_URL: str = "https://api.sarvam.ai/text-to-speech"
-    SARVAM_LANGUAGE_CODE: str = "en-IN"
-    SARVAM_SPEAKER: str = "shubh"
-    SARVAM_MODEL: str = "bulbul:v3"
-
-    INCIDENT_DB_PATH: str = "data/incidents.db"
-    INCIDENT_AUDIO_DIR: str = "data/audio"
     VIDEO_UPLOAD_DIR: str = "data/uploads"
 
 

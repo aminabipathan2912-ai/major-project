@@ -1,49 +1,48 @@
 # CCTV Accident & Violence Detection App
 
-Verified detection can trigger **Sarvam TTS** and a **Twilio outbound call**. You say **Done**; the dashboard switches to **ACCIDENT REPORTED**.
+This repository is split into two apps so the cloud host never needs to load the video models.
 
 There is no two-way AI conversation. Official police/ambulance emergency numbers are **not** dialed. Use your own test/operator numbers.
 
-## Hosted test (required for Twilio)
+## Hybrid architecture
 
-You only host the **Python backend**. There is no separate frontend app.
+```
+Local inference app                         Hosted alert backend
+───────────────────                         ────────────────────
+Video → OpenCV → PyTorch models             PostgreSQL incidents
+      → temporal verification               Sarvam TTS
+      → authenticated event POST ─────────→ Twilio call + “Done” webhook
+```
 
-`PUBLIC_BASE_URL` is still required because **Twilio’s cloud** (not your browser) must HTTP-call that backend:
+### Local inference app (repository root)
 
-- fetch TwiML (`/twilio/voice/...`) when the call connects
-- download the Sarvam audio (`/audio/...`)
-- POST what you said (`/twilio/acknowledge/...`)
+Run this on your laptop/edge computer. It owns the video, OpenCV, PyTorch, and `.pt` weights. It never needs Twilio, Sarvam, or database credentials.
 
-Localhost is invisible to Twilio. The demo page at `/` is optional and ships with the same backend.
+Set these local values once `alert_backend` is deployed:
 
-**Numbers:** one Twilio from-number, one to-number (your phone). Not 100/108/112.
+```env
+EMERGENCY_MODE=remote
+ALERT_BACKEND_URL=https://your-alert-backend.onrender.com
+ALERT_BACKEND_TOKEN=<same-long-random-secret-as-the-hosted-backend>
+```
 
-1. Fill `.env`:
-   - `PUBLIC_BASE_URL=https://your-backend.onrender.com` (no trailing slash)
-   - `TWILIO_ACCOUNT_SID`
-   - `TWILIO_AUTH_TOKEN`
-   - `TWILIO_FROM_NUMBER`
-   - `TWILIO_TO_NUMBER`
-   - `SARVAM_API_KEY`
-   - `EMERGENCY_MODE=voice`
-   - `CAMERA_SOURCE=...`
-   - `INCIDENT_LOCATION=...`
-2. Host this FastAPI app with those env vars.
-3. Open the hosted site. **Upload a fight/accident clip** on the page (do not rely on a video in the git repo).
-4. Models run on that uploaded file. If verified, your phone rings. Say **Done**.
-5. Incident status becomes **REPORTED**.
+### Hosted alert backend (`alert_backend/`)
 
-If Sarvam fails, Twilio still speaks a fallback `<Say>` of the same text.
+Deploy this folder as a separate Render web service. Its build command is:
 
-### Twilio console
-- Voice webhook URLs are generated automatically: `/twilio/voice/{incident_id}`
-- Status: `/twilio/status/{call_id}`
-- Speech result: `/twilio/acknowledge/{incident_id}`
-- Audio: `/audio/{incident_id}.wav`
+```bash
+pip install -r requirements.txt
+```
 
-### Local run (pipeline only)
+Its start command is:
 
-`python run_demo_server.py` still works for video/models. Voice calling needs `PUBLIC_BASE_URL` on a hosted deployment.
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Set the variables in `alert_backend/.env.example` in Render's environment dashboard. In particular, it needs `DATABASE_URL`, `ALERT_INGEST_TOKEN`, `PUBLIC_BASE_URL`, Twilio credentials, and the Sarvam key. `PUBLIC_BASE_URL` is required because Twilio must fetch TwiML/audio and post call updates to this public HTTPS backend.
+
+The alert backend calls only your configured test/operator number—not official police or ambulance numbers.
 
 ---
 
@@ -51,11 +50,10 @@ If Sarvam fails, Twilio still speaks a fallback `<Say>` of the same text.
 
 ```
 Video → accident/violence models → temporal verifier
-     → incident (DETECTED)
-     → Sarvam TTS
-     → Twilio call to your test phone
+     → authenticated event to alert_backend
+     → PostgreSQL incident → Sarvam TTS → Twilio call
      → you say Done
-     → status REPORTED → dashboard: ACCIDENT REPORTED
+     → PostgreSQL status REPORTED
 ```
 
 ---
@@ -86,7 +84,7 @@ The product flow is:
 2. Frames are buffered
 3. AI models look for accidents or fighting
 4. A verification layer checks if the detection is strong and repeated
-5. Only then an emergency incident can be created (Sarvam + Twilio on hosted deploy)
+5. Only then a verified event is sent to the hosted alert backend
 
 ```
 Pre-recorded video (default) / Webcam / RTSP
@@ -97,7 +95,7 @@ Pre-recorded video (default) / Webcam / RTSP
         ↓
  Temporal Event Verification
         ↓
- Incident + Sarvam TTS + Twilio (hosted)
+ Verified event POST → hosted incident + Sarvam TTS + Twilio
 ```
 
 The web page at `http://localhost:8000` is only a **demo/testing screen**.  
@@ -340,7 +338,7 @@ See `training/README.md` for how the notebooks produced these files.
 
 | Question | Answer |
 |---|---|
-| How do I test the phone alert? | Host the app, set `PUBLIC_BASE_URL` + Twilio/Sarvam keys, use your test number |
+| How do I test the phone alert? | Deploy `alert_backend/`, set its database/Twilio/Sarvam variables, then set the local remote-backend URL/token |
 | Can it call real 100/108/112? | **No.** Test/operator numbers only |
 | Is the dashboard the main product? | **No** — the pipeline is the product |
 

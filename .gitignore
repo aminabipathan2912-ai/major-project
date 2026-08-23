@@ -22,3 +22,7 @@ __pycache__/
 
 # Incident DB and generated TTS audio
 /data/
+
+# Hosted alert-backend secrets and temporary TTS output
+/alert_backend/.env
+/alert_backend/data/
