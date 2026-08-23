@@ -17,6 +17,8 @@ const incidentMeta = document.getElementById("incidentMeta");
 let events = [];
 let usingFilePlayer = false;
 let activeVideoSource = "";
+const MAX_VISIBLE_EVENTS = 3;
+const STATUS_REFRESH_MS = 10000;
 
 function fmtTime(epoch) {
   if (!epoch) return "—";
@@ -196,11 +198,11 @@ uploadForm.addEventListener("submit", async (ev) => {
   refreshStatus();
 });
 refreshStatus();
-setInterval(refreshStatus, 2000);
+setInterval(refreshStatus, STATUS_REFRESH_MS);
 
 const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/events");
 ws.onmessage = (ev) => {
   events.unshift(JSON.parse(ev.data));
-  events = events.slice(0, 40);
+  events = events.slice(0, MAX_VISIBLE_EVENTS);
   renderEvents();
 };

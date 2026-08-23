@@ -76,6 +76,31 @@ class IncidentStore:
             cur.execute("SELECT * FROM incidents WHERE id = %s", (incident_id,))
             return cur.fetchone()
 
+    def get_active_incident(self, camera_id: str) -> dict[str, Any] | None:
+        """Return an incident that is still being handled for this camera.
+
+        This is a server-side safety guard. Event keys include a timestamp, so
+        an inference cooldown alone cannot prevent a later prediction from
+        creating a second concurrent emergency call.
+        """
+        active_statuses = (
+            "DETECTED",
+            "AWAITING_ACKNOWLEDGEMENT",
+            "TRIAL_CALL_STARTED",
+            "CALL_ANSWERED",
+        )
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM incidents
+                WHERE camera_id = %s AND status = ANY(%s)
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (camera_id, list(active_statuses)),
+            )
+            return cur.fetchone()
+
     def update_incident(self, incident_id: str, **fields: Any) -> None:
         if not fields:
             return

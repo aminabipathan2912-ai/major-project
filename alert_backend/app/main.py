@@ -71,6 +71,18 @@ async def create_incident(event: VerifiedEventIn, authorization: str | None = He
     event_data = event.model_dump()
     message = emergency_message(event_data)
     store: IncidentStore = app.state.store
+    active_incident = await asyncio.to_thread(store.get_active_incident, event.camera_id)
+    if active_incident:
+        # Never start overlapping calls for the same camera. The caller still
+        # receives this incident id, letting the dashboard show the call that
+        # is currently awaiting acknowledgement.
+        return {
+            "ok": True,
+            "duplicate": True,
+            "active": True,
+            "incident_id": str(active_incident["id"]),
+            "call_started": False,
+        }
     incident, created = await asyncio.to_thread(store.create_incident, event_data, message)
     if not created:
         return {"ok": True, "duplicate": True, "incident_id": str(incident["id"])}
@@ -152,7 +164,8 @@ async def acknowledge(incident_id: str, request: Request):
             acknowledged_at=datetime.now(timezone.utc),
         )
         return xml(say_twiml("Acknowledgement received. The incident has been reported."))
-    return xml(say_twiml("Acknowledgement was not recognized. The incident remains active."))
+    await asyncio.to_thread(store.update_incident, incident_id, status="NO_ACKNOWLEDGEMENT")
+    return xml(say_twiml("Acknowledgement was not recognized. The call will now end."))
 
 
 @app.post("/twilio/status/{call_id}")
