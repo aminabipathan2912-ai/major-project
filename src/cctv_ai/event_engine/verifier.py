@@ -50,7 +50,11 @@ class TemporalVerifier:
         is_confident = prediction.confidence >= self._config.confidence_threshold
 
         if is_positive and is_confident:
-            self._hits.append((prediction.timestamp_epoch_s, float(prediction.confidence)))
+            # A file source can decode an entire short clip much faster than real
+            # time. Its frame timestamps may therefore be old by the time a CPU
+            # model finishes predicting. Verification is about persistence of
+            # detections, so measure the hit window at prediction-arrival time.
+            self._hits.append((now, float(prediction.confidence)))
         else:
             # Do not fully reset; keep temporal context for jitter.
             # (If you want full reset behavior, you can change this policy.)
@@ -69,14 +73,14 @@ class TemporalVerifier:
                 return None
 
         # Verified: choose latest hit confidence as the representative.
-        latest_hit_ts, latest_hit_conf = self._hits[-1]
+        _, latest_hit_conf = self._hits[-1]
         self._last_verified_epoch_s = now
 
         return VerifiedEvent(
             event_type="ACCIDENT" if self._config.positive_label == "ACCIDENT" else "VIOLENCE",
             verified_label=self._config.positive_label,
             confidence=latest_hit_conf,
-            timestamp_epoch_s=latest_hit_ts,
+            timestamp_epoch_s=prediction.timestamp_epoch_s,
             camera_id=prediction.camera_id,
             details={
                 "hits_in_window": len(self._hits),
@@ -85,4 +89,3 @@ class TemporalVerifier:
                 "cooldown_sec": self._config.cooldown_sec,
             },
         )
-

@@ -9,10 +9,9 @@
   <body>
     <header class="top">
       <div>
-        <p class="kicker">Demo monitor</p>
+        <p class="kicker">CCTV monitor</p>
         <h1>Accident and violence detection</h1>
       </div>
-      <p class="note">This page is only for testing. The product is the camera pipeline.</p>
     </header>
 
     <main class="layout">
@@ -25,6 +24,9 @@
           <video id="filePlayer" controls playsinline preload="metadata" hidden></video>
           <img id="liveView" alt="Live decoded frames" hidden />
           <p id="playerHint" class="hint">Waiting for video…</p>
+        </div>
+        <div class="player-actions">
+          <button type="button" id="playBtn" hidden>Play video</button>
         </div>
       </section>
 
