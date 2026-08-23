@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     INCIDENT_DB_PATH: str = "data/incidents.db"
     INCIDENT_AUDIO_DIR: str = "data/audio"
+    VIDEO_UPLOAD_DIR: str = "data/uploads"
 
 
 def get_settings() -> Settings:

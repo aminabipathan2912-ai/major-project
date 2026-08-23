@@ -35,10 +35,13 @@ class PipelineService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
+        self._active_source_type = settings.CAMERA_SOURCE_TYPE
+        self._active_source = settings.CAMERA_SOURCE
+
         self._frame_buffer = FrameBuffer(maxlen=settings.FRAME_BUFFER_MAXLEN)
         self._camera_worker = create_camera_worker(
-            source_type=settings.CAMERA_SOURCE_TYPE,
-            source=settings.CAMERA_SOURCE,
+            source_type=self._active_source_type,
+            source=self._active_source,
             frame_buffer=self._frame_buffer,
         )
 
@@ -107,22 +110,27 @@ class PipelineService:
 
     def get_source_info(self) -> dict[str, Any]:
         return {
-            "source_type": self._settings.CAMERA_SOURCE_TYPE,
-            "source": self._settings.CAMERA_SOURCE,
+            "source_type": self._active_source_type,
+            "source": self._active_source,
             "camera_id": self._settings.CAMERA_ID,
         }
 
     def resolve_video_path(self) -> str | None:
-        if self._settings.CAMERA_SOURCE_TYPE != "file":
+        if self._active_source_type != "file":
             return None
         from pathlib import Path
 
-        path = Path(self._settings.CAMERA_SOURCE)
+        path = Path(self._active_source)
         if not path.is_absolute():
             path = Path.cwd() / path
         if path.exists() and path.is_file():
             return str(path)
         return None
+
+    def switch_to_uploaded_file(self, path: str) -> None:
+        self._active_source_type = "file"
+        self._active_source = path
+        self._camera_worker.restart_with(source_type="file", source=path)
 
     def get_status(self) -> PipelineStatus:
         cam_status = self._camera_worker.status
@@ -154,7 +162,10 @@ class PipelineService:
             return
         self._running = True
 
-        self._camera_worker.start()
+        if self._active_source_type in ("webcam", "rtsp"):
+            self._camera_worker.start()
+        else:
+            print("[CAMERA] waiting for an uploaded video on the demo page")
 
         self._task_accident = asyncio.create_task(self._inference_loop(model=self._accident_model, verifier=self._accident_verifier))
         self._task_violence = asyncio.create_task(self._inference_loop(model=self._violence_model, verifier=self._violence_verifier))

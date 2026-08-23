@@ -29,8 +29,8 @@ Localhost is invisible to Twilio. The demo page at `/` is optional and ships wit
    - `CAMERA_SOURCE=...`
    - `INCIDENT_LOCATION=...`
 2. Host this FastAPI app with those env vars.
-3. Trigger a verified detection.
-4. Your `TWILIO_TO_NUMBER` rings. Say **Done**.
+3. Open the hosted site. **Upload a fight/accident clip** on the page (do not rely on a video in the git repo).
+4. Models run on that uploaded file. If verified, your phone rings. Say **Done**.
 5. Incident status becomes **REPORTED**.
 
 If Sarvam fails, Twilio still speaks a fallback `<Say>` of the same text.

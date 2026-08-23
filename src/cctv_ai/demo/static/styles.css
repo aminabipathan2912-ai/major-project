@@ -121,6 +121,18 @@ h2 {
   margin-bottom: 12px;
 }
 
+.upload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.upload input {
+  flex: 1 1 180px;
+}
+
 .stage {
   background: #eceae4;
   border-radius: 8px;

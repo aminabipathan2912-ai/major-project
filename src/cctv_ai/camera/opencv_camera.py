@@ -70,6 +70,20 @@ class OpenCVCameraWorker:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=timeout_sec)
+        self._thread = None
+
+    def restart_with(self, *, source_type: str, source: str) -> None:
+        self.stop()
+        self._source_type = source_type
+        self._source = source
+        self._set_status(
+            source_type=source_type,
+            source=source,
+            running=False,
+            last_error="",
+            last_frame_timestamp_epoch_s=None,
+        )
+        self.start()
 
     def _set_status(self, **kwargs) -> None:
         with self._status_lock:

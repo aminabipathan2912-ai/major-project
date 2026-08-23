@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -78,6 +79,29 @@ def create_app() -> FastAPI:
             latest["calls"] = pipeline.incident_store.calls_for_incident(latest["id"])
         payload["latest_incident"] = latest
         return JSONResponse(content=payload)
+
+    @app.post("/api/upload")
+    async def upload_video(file: UploadFile = File(...)):
+        pipeline: PipelineService = app.state.pipeline
+        suffix = Path(file.filename or "clip.mp4").suffix.lower()
+        if suffix not in {".mp4", ".avi", ".mov", ".mkv", ".webm"}:
+            return JSONResponse({"ok": False, "error": "Use mp4, avi, mov, mkv, or webm."}, status_code=400)
+
+        upload_dir = Path(pipeline.settings.VIDEO_UPLOAD_DIR)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        dest = upload_dir / f"{uuid.uuid4().hex}{suffix}"
+        data = await file.read()
+        if not data:
+            return JSONResponse({"ok": False, "error": "Empty file."}, status_code=400)
+        dest.write_bytes(data)
+        pipeline.switch_to_uploaded_file(str(dest))
+        return JSONResponse(
+            {
+                "ok": True,
+                "path": str(dest),
+                "playback_url": "/api/video",
+            }
+        )
 
     @app.get("/api/incidents")
     async def incidents():

@@ -24,12 +24,17 @@
       <section class="panel player-panel">
         <div class="panel-head">
           <h2>Source</h2>
-          <p id="sourceLabel" class="muted">Loading…</p>
+          <p id="sourceLabel" class="muted">Upload a clip to start</p>
         </div>
+        <form id="uploadForm" class="upload">
+          <input id="videoFile" type="file" accept="video/mp4,video/*,.mp4,.avi,.mov,.mkv,.webm" />
+          <button type="submit">Upload and run</button>
+        </form>
+        <p id="uploadStatus" class="muted"></p>
         <div class="stage">
           <video id="filePlayer" controls playsinline preload="metadata" hidden></video>
           <img id="liveView" alt="Live decoded frames" hidden />
-          <p id="playerHint" class="hint">Waiting for video…</p>
+          <p id="playerHint" class="hint">Upload a video to start detection.</p>
         </div>
       </section>
 

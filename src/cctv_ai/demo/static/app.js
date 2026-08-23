@@ -6,6 +6,9 @@ const modelsEl = document.getElementById("models");
 const readoutEl = document.getElementById("readout");
 const eventsEl = document.getElementById("events");
 const refreshBtn = document.getElementById("refreshBtn");
+const uploadForm = document.getElementById("uploadForm");
+const videoFile = document.getElementById("videoFile");
+const uploadStatus = document.getElementById("uploadStatus");
 const incidentBanner = document.getElementById("incidentBanner");
 const incidentTitle = document.getElementById("incidentTitle");
 const incidentMeta = document.getElementById("incidentMeta");
@@ -31,7 +34,7 @@ function showFilePlayer() {
   liveView.hidden = true;
   playerHint.hidden = true;
   filePlayer.hidden = false;
-  filePlayer.src = "/api/video";
+  filePlayer.src = "/api/video?ts=" + Date.now();
 }
 
 filePlayer.addEventListener("error", () => {
@@ -138,6 +141,28 @@ async function refreshStatus() {
 }
 
 refreshBtn.addEventListener("click", refreshStatus);
+uploadForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!videoFile.files || !videoFile.files[0]) {
+    uploadStatus.textContent = "Choose a video file first.";
+    return;
+  }
+  uploadStatus.textContent = "Uploading…";
+  const body = new FormData();
+  body.append("file", videoFile.files[0]);
+  const res = await fetch("/api/upload", { method: "POST", body });
+  const data = await res.json();
+  if (!data.ok) {
+    uploadStatus.textContent = data.error || "Upload failed.";
+    return;
+  }
+  usingFilePlayer = false;
+  filePlayer.removeAttribute("src");
+  filePlayer.load();
+  uploadStatus.textContent = "Uploaded. Inference is running on this clip.";
+  showFilePlayer();
+  refreshStatus();
+});
 refreshStatus();
 setInterval(refreshStatus, 2000);
 
