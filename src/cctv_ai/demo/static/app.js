@@ -118,7 +118,10 @@ function renderIncident(incident) {
   incidentBanner.className = "banner";
   const status = (incident.status || "").toUpperCase();
   const deliveryState = (incident.delivery_state || "").toLowerCase();
-  if (deliveryState === "already_active") {
+  if (status === "REPORTED") {
+    incidentBanner.classList.add("reported");
+    incidentTitle.textContent = "CALL ACKNOWLEDGED — INCIDENT REPORTED";
+  } else if (deliveryState === "already_active") {
     incidentBanner.classList.add("waiting");
     incidentTitle.textContent = "CALL ALREADY ACTIVE — NO NEW CALL";
   } else if (deliveryState === "call_failed") {
@@ -127,9 +130,6 @@ function renderIncident(incident) {
   } else if (deliveryState === "not_configured") {
     incidentBanner.classList.add("detected");
     incidentTitle.textContent = "CALL NOT CONFIGURED";
-  } else if (status === "REPORTED") {
-    incidentBanner.classList.add("reported");
-    incidentTitle.textContent = "CALL ACKNOWLEDGED — INCIDENT REPORTED";
   } else if (status === "AWAITING_ACKNOWLEDGEMENT") {
     incidentBanner.classList.add("waiting");
     incidentTitle.textContent = "AWAITING ACKNOWLEDGEMENT";
