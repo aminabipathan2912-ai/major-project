@@ -59,7 +59,6 @@ playBtn.addEventListener("click", async () => {
 filePlayer.addEventListener("play", updatePlayButton);
 filePlayer.addEventListener("pause", updatePlayButton);
 filePlayer.addEventListener("ended", updatePlayButton);
-}
 
 filePlayer.addEventListener("error", () => {
   showLiveView();
