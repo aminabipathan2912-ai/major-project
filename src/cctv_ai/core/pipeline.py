@@ -256,14 +256,12 @@ class PipelineService:
                     verified = None
 
                 if verified is not None:
-                    # Finish escalation first, so every dashboard receives the
-                    # event with the matching alert state already available.
+                    # Show a verified event immediately. Escalation may wait
+                    # on a remote service, but must not delay the event feed.
+                    await self._broadcast_verified_event(verified)
                     try:
                         await self._emergency_provider.on_verified_emergency(verified)
                     except Exception as e:
                         print(f"[EMERGENCY] provider error: {e}")
-                    # Broadcast to every open dashboard, rather than letting
-                    # old browser tabs compete for a single queue item.
-                    await self._broadcast_verified_event(verified)
 
             await asyncio.sleep(interval_s)

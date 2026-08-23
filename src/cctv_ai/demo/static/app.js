@@ -212,10 +212,10 @@ setInterval(refreshStatus, STATUS_REFRESH_MS);
 
 const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/events");
 ws.onmessage = async (ev) => {
-  // The server has already finished the remote escalation before publishing
-  // this event. Refresh first so readout and incident state stay in sync.
-  await refreshStatus();
   events.unshift(JSON.parse(ev.data));
   events = events.slice(0, MAX_VISIBLE_EVENTS);
   renderEvents();
+  // Show the event immediately. A later refresh picks up the call outcome
+  // once the remote alert backend finishes its request.
+  setTimeout(refreshStatus, 500);
 };

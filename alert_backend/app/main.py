@@ -37,6 +37,13 @@ async def assert_twilio_signature(request: Request, form: dict) -> None:
     url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}{request.url.path}"
     validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
     if not signature or not validator.validate(url, form, signature):
+        logger.warning(
+            "Rejected Twilio webhook signature: path=%s method=%s signature_present=%s expected_base=%s",
+            request.url.path,
+            request.method,
+            bool(signature),
+            settings.PUBLIC_BASE_URL.rstrip("/"),
+        )
         raise HTTPException(status_code=403, detail="invalid Twilio signature")
 
 
@@ -167,12 +174,20 @@ async def incident_status(incident_id: str, authorization: str | None = Header(d
 
 @app.api_route("/twilio/voice/{incident_id}", methods=["GET", "POST"])
 async def twilio_voice(incident_id: str, request: Request):
+    logger.info("Twilio voice webhook received: incident=%s method=%s", incident_id, request.method)
     form = dict(await request.form()) if request.method == "POST" else {}
     await assert_twilio_signature(request, form)
     incident = await asyncio.to_thread(app.state.store.get_incident, incident_id)
     if not incident:
+        logger.warning("Twilio voice webhook references missing incident=%s", incident_id)
         return xml(say_twiml("Incident not found."))
-    return xml(alert_twiml(settings, incident_id, incident["message_text"], incident["audio_filename"]))
+    twiml = alert_twiml(settings, incident_id, incident["message_text"], incident["audio_filename"])
+    logger.info(
+        "Returned TwiML: incident=%s using_sarvam_audio=%s",
+        incident_id,
+        bool(incident["audio_filename"]),
+    )
+    return xml(twiml)
 
 
 @app.post("/twilio/acknowledge/{incident_id}")
