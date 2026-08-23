@@ -29,12 +29,21 @@ class LogOnlyEmergencyProvider(EmergencyProvider):
 class RemoteEmergencyProvider(EmergencyProvider):
     """Send only verified-event metadata to the hosted alert backend."""
 
+    _TERMINAL_STATUSES = {
+        "REPORTED",
+        "NO_ACKNOWLEDGEMENT",
+        "CALL_FAILED",
+        "CALL_NOT_CONFIGURED",
+        "TTS_FAILED",
+    }
+
     def __init__(self, settings: Settings) -> None:
         self._url = settings.ALERT_BACKEND_URL.rstrip("/")
         self._token = settings.ALERT_BACKEND_TOKEN
         self._location = settings.INCIDENT_LOCATION
         self._latest_incident_id: str | None = None
         self._latest_delivery_state: str | None = None
+        self._latest_incident: dict | None = None
 
     async def on_verified_emergency(self, event: VerifiedEvent) -> None:
         if not self._url or not self._token:
@@ -60,6 +69,7 @@ class RemoteEmergencyProvider(EmergencyProvider):
                 body = response.json()
                 self._latest_incident_id = body.get("incident_id")
                 self._latest_delivery_state = body.get("delivery_state")
+                self._latest_incident = None
             print(f"[ALERT_BACKEND] event sent: {event.event_type} {event.confidence:.3f}")
         except httpx.HTTPStatusError as exc:
             # The hosted backend returns safe operational details (such as a
@@ -72,6 +82,7 @@ class RemoteEmergencyProvider(EmergencyProvider):
                 if isinstance(failure, dict):
                     self._latest_incident_id = failure.get("incident_id")
                     self._latest_delivery_state = failure.get("delivery_state", "call_failed")
+                    self._latest_incident = None
             except ValueError:
                 pass
             print(
@@ -85,6 +96,8 @@ class RemoteEmergencyProvider(EmergencyProvider):
         """Fetch status updates made by Twilio callbacks without exposing the token to JS."""
         if not self._latest_incident_id or not self._url or not self._token:
             return None
+        if self._latest_incident and self._latest_incident.get("status") in self._TERMINAL_STATUSES:
+            return dict(self._latest_incident)
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 response = await client.get(
@@ -95,6 +108,7 @@ class RemoteEmergencyProvider(EmergencyProvider):
                 incident = response.json()
                 if self._latest_delivery_state:
                     incident["delivery_state"] = self._latest_delivery_state
+                self._latest_incident = incident
                 return incident
         except httpx.HTTPError as exc:
             print(f"[ALERT_BACKEND] status lookup failed: {exc}")

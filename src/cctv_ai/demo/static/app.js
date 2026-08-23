@@ -129,7 +129,7 @@ function renderIncident(incident) {
     incidentTitle.textContent = "CALL NOT CONFIGURED";
   } else if (status === "REPORTED") {
     incidentBanner.classList.add("reported");
-    incidentTitle.textContent = "ACCIDENT REPORTED";
+    incidentTitle.textContent = "CALL ACKNOWLEDGED — INCIDENT REPORTED";
   } else if (status === "AWAITING_ACKNOWLEDGEMENT") {
     incidentBanner.classList.add("waiting");
     incidentTitle.textContent = "AWAITING ACKNOWLEDGEMENT";

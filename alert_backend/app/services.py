@@ -17,12 +17,13 @@ def emergency_message(event: dict) -> str:
     kind = "road accident" if event["event_type"] == "ACCIDENT" else "violent incident"
     when = datetime.fromtimestamp(event["timestamp_epoch_s"]).astimezone().strftime("%I:%M %p")
     return (
-        "This is an automated emergency alert. "
+        "fuck you nigga"
+    )
+    """This is an automated emergency alert. "
         f"A possible {kind} has been detected at {event['location']}. "
         f"Camera ID is {event['camera_id']}. The incident was detected at {when}. "
-        "Please say done to confirm that the incident has been reported."
-    )
-
+        "Please say done to confirm that the incident has been reported."""
+    
 
 def is_acknowledgement(speech: str) -> bool:
     value = (speech or "").lower().strip()
