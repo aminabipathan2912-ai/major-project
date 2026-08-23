@@ -49,6 +49,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CCTV Alert Backend", lifespan=lifespan)
 
 
+@app.get("/")
+async def index():
+    return {
+        "ok": True,
+        "service": "CCTV alert backend",
+        "health": "/health",
+    }
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}

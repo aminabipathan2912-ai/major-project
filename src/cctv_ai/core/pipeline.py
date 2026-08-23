@@ -76,6 +76,11 @@ class PipelineService:
         self._task_accident: asyncio.Task | None = None
         self._task_violence: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
+        # EfficientNet forwards are memory-intensive on CPU. The models can
+        # run independently, but not at the same instant on a low-RAM edge
+        # device; serialize them to prevent their activation memory peaking
+        # together.
+        self._inference_lock = asyncio.Lock()
 
     @property
     def verified_events_queue(self) -> asyncio.Queue[VerifiedEvent]:
@@ -217,7 +222,10 @@ class PipelineService:
             )
 
             try:
-                prediction: ModelPrediction | None = await asyncio.to_thread(model.predict, clip_input)
+                async with self._inference_lock:
+                    prediction: ModelPrediction | None = await asyncio.to_thread(
+                        model.predict, clip_input
+                    )
             except Exception as e:
                 # Never crash the pipeline due to one model.
                 print(f"[INFERENCE][{status.model_name}] prediction error: {e}")

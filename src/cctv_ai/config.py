@@ -15,7 +15,9 @@ class Settings(BaseSettings):
 
     INFERENCE_INTERVAL_MS: int = 1000
     CLIP_FRAME_COUNT: int = 8
-    FRAME_BUFFER_MAXLEN: int = 128
+    # 32 comfortably retains the 8-frame inference clip without keeping a
+    # large number of full-resolution OpenCV frames in RAM.
+    FRAME_BUFFER_MAXLEN: int = 32
 
     ACCIDENT_CONFIDENCE_THRESHOLD: float = 0.6
     ACCIDENT_MIN_HITS: int = 3

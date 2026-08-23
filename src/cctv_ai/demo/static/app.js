@@ -2,6 +2,7 @@ const sourceLabel = document.getElementById("sourceLabel");
 const filePlayer = document.getElementById("filePlayer");
 const liveView = document.getElementById("liveView");
 const playerHint = document.getElementById("playerHint");
+const playBtn = document.getElementById("playBtn");
 const modelsEl = document.getElementById("models");
 const readoutEl = document.getElementById("readout");
 const eventsEl = document.getElementById("events");
@@ -15,6 +16,7 @@ const incidentMeta = document.getElementById("incidentMeta");
 
 let events = [];
 let usingFilePlayer = false;
+let activeVideoSource = "";
 
 function fmtTime(epoch) {
   if (!epoch) return "—";
@@ -26,15 +28,37 @@ function showLiveView() {
   filePlayer.hidden = true;
   liveView.hidden = false;
   playerHint.hidden = true;
+  playBtn.hidden = true;
   liveView.src = "/api/stream.mjpg";
 }
 
-function showFilePlayer() {
+function showFilePlayer(source) {
   usingFilePlayer = true;
   liveView.hidden = true;
   playerHint.hidden = true;
   filePlayer.hidden = false;
-  filePlayer.src = "/api/video?ts=" + Date.now();
+  playBtn.hidden = false;
+  activeVideoSource = source || "";
+  filePlayer.src = `/api/video?source=${encodeURIComponent(activeVideoSource)}&v=${Date.now()}`;
+  filePlayer.load();
+}
+
+function updatePlayButton() {
+  playBtn.textContent = filePlayer.paused ? "Play video" : "Pause video";
+}
+
+playBtn.addEventListener("click", async () => {
+  if (filePlayer.paused) {
+    await filePlayer.play();
+  } else {
+    filePlayer.pause();
+  }
+  updatePlayButton();
+});
+
+filePlayer.addEventListener("play", updatePlayButton);
+filePlayer.addEventListener("pause", updatePlayButton);
+filePlayer.addEventListener("ended", updatePlayButton);
 }
 
 filePlayer.addEventListener("error", () => {
@@ -130,8 +154,8 @@ async function refreshStatus() {
   renderReadout(data.last_predictions || {});
   renderIncident(data.latest_incident);
 
-  if (data.playback && data.playback.file_available && cam.source_type === "file" && !usingFilePlayer && !filePlayer.src) {
-    showFilePlayer();
+  if (data.playback && data.playback.file_available && cam.source_type === "file" && (!usingFilePlayer || activeVideoSource !== cam.source)) {
+    showFilePlayer(cam.source);
   } else if (cam.source_type !== "file") {
     showLiveView();
   } else if (cam.last_error && !usingFilePlayer) {
@@ -160,7 +184,7 @@ uploadForm.addEventListener("submit", async (ev) => {
   filePlayer.removeAttribute("src");
   filePlayer.load();
   uploadStatus.textContent = "Uploaded. Inference is running on this clip.";
-  showFilePlayer();
+  showFilePlayer(data.path);
   refreshStatus();
 });
 refreshStatus();

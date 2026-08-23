@@ -59,6 +59,10 @@ h2 {
   color: var(--muted);
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .note {
   max-width: 280px;
   margin: 0;
@@ -149,6 +153,10 @@ video,
   max-height: 520px;
   display: block;
   background: #111;
+}
+
+.player-actions {
+  margin-top: 12px;
 }
 
 .hint {
