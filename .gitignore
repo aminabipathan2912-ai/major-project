@@ -9,7 +9,7 @@ __pycache__/
 # Local dataset caches from training experiments
 /training/**/data/
 /training/**/cache/
-
+/data
 # OS/editor
 .vscode/
 .idea/
