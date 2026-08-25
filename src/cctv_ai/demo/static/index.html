@@ -8,10 +8,11 @@
   </head>
   <body>
     <header class="top">
-      <div>
-        <p class="kicker">CCTV monitor</p>
-        <h1>Accident and violence detection</h1>
+      <div class="brand-block">
+        <p class="kicker">CCTV / Incident monitor</p>
+        <h1>Accident and violence<br />detection.</h1>
       </div>
+      <p class="top-note">Local video inference<br />with verified escalation</p>
     </header>
 
     <section id="incidentBanner" class="banner" hidden>
@@ -56,7 +57,7 @@
         <section class="panel">
           <div class="panel-head">
             <h2>Verified events</h2>
-            <button type="button" id="refreshBtn">Refresh status</button>
+            <button type="button" id="refreshBtn" class="quiet-button">Refresh</button>
           </div>
           <ol id="events" class="events">
             <li class="muted">None yet. Events appear only after repeated high-confidence detections.</li>
