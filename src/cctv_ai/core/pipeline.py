@@ -43,6 +43,10 @@ class PipelineService:
             frame_buffer=self._frame_buffer,
             loop_file=settings.FILE_LOOP,
             realtime_file=settings.FILE_REALTIME,
+            inference_frame_size=settings.INFERENCE_FRAME_SIZE,
+            ingest_resize_exact=settings.INGEST_RESIZE_EXACT,
+            ingest_sample_fps=settings.INGEST_SAMPLE_FPS,
+            preview_max_width=settings.PREVIEW_MAX_WIDTH,
         )
 
         self._accident_model, self._violence_model, self._audio_model = create_models(settings)
@@ -112,11 +116,23 @@ class PipelineService:
         """
         Demo helper only.
 
-        Returns the most recent frame from the camera as a BGR numpy array,
-        or `None` if the camera hasn't produced frames yet.
+        Returns the most recent preview frame as a BGR numpy array, or `None` if
+        the camera hasn't produced frames yet. This reads the preview slot, which
+        is updated on every decoded frame and held at preview resolution — the
+        inference ring buffer is decimated and downscaled, so it is the wrong
+        source for a smooth browser view.
         """
-        latest = self._frame_buffer.latest()
-        return latest.frame_bgr if latest is not None else None
+        latest = self._frame_buffer.latest_preview()
+        return latest[0] if latest is not None else None
+
+    def get_latest_preview(self) -> tuple[Any, int] | None:
+        """
+        Returns (frame_bgr, seq) or None.
+
+        `seq` only changes when the frame does, letting the JPEG encoder skip
+        work instead of re-encoding an identical frame for every client poll.
+        """
+        return self._frame_buffer.latest_preview()
 
     def get_source_info(self) -> dict[str, Any]:
         return {
@@ -137,11 +153,20 @@ class PipelineService:
             return str(path)
         return None
 
-    def switch_to_uploaded_file(self, path: str) -> None:
+    async def switch_to_uploaded_file(self, path: str) -> None:
+        """
+        Point the pipeline at a newly uploaded clip.
+
+        `restart_with` joins the capture thread with a 5s timeout, so it must not
+        run on the event loop — a slow `cap.read()` would stall every other
+        request, including the verified-event WebSocket.
+        """
         self._active_source_type = "file"
         self._active_source = path
         self._file_escalated_event_types.clear()
-        self._camera_worker.restart_with(source_type="file", source=path)
+        await asyncio.to_thread(
+            self._camera_worker.restart_with, source_type="file", source=path
+        )
 
     def get_status(self) -> PipelineStatus:
         cam_status = self._camera_worker.status
@@ -157,6 +182,9 @@ class PipelineService:
                 "running": cam_status.running,
                 "last_error": cam_status.last_error,
                 "last_frame_timestamp_epoch_s": cam_status.last_frame_timestamp_epoch_s,
+                "frames_decoded": cam_status.frames_decoded,
+                "frames_ingested": cam_status.frames_ingested,
+                "buffered_frames": len(self._frame_buffer),
             },
             models=models,
             verification={

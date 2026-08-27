@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import cv2
 
 from .frame_buffer import FrameBuffer
+from .frame_scaler import resize_max_width, resize_shorter_side
 
 
 @dataclass
@@ -16,6 +17,8 @@ class CameraWorkerStatus:
     running: bool
     last_error: str = ""
     last_frame_timestamp_epoch_s: float | None = None
+    frames_decoded: int = 0
+    frames_ingested: int = 0
 
 
 class OpenCVCameraWorker:
@@ -26,6 +29,11 @@ class OpenCVCameraWorker:
     - connects (webcam / file / RTSP)
     - continuously pushes frames into FrameBuffer
     - handles reconnection/restart
+
+    Frames are downscaled once here rather than repeatedly downstream. Every
+    decoded frame updates the preview slot so the browser view stays smooth,
+    while the inference ring buffer is fed at the decimated ingest rate — only
+    enough frames to fill a clip window need to be retained.
     """
 
     def __init__(
@@ -39,6 +47,10 @@ class OpenCVCameraWorker:
         realtime_file: bool = True,
         target_grab_fps: float | None = None,
         cap_buffer_size: int | None = None,
+        inference_frame_size: int = 256,
+        ingest_resize_exact: bool = True,
+        ingest_sample_fps: float = 0.0,
+        preview_max_width: int = 640,
     ) -> None:
         self._source_type = source_type
         self._source = source
@@ -48,6 +60,10 @@ class OpenCVCameraWorker:
         self._realtime_file = realtime_file
         self._target_grab_fps = target_grab_fps
         self._cap_buffer_size = cap_buffer_size
+        self._inference_frame_size = int(inference_frame_size)
+        self._ingest_resize_exact = bool(ingest_resize_exact)
+        self._ingest_sample_fps = float(ingest_sample_fps)
+        self._preview_max_width = int(preview_max_width)
 
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -78,12 +94,17 @@ class OpenCVCameraWorker:
         self.stop()
         self._source_type = source_type
         self._source = source
+        # A new source must not inherit the previous scene's frames: a clip
+        # sampled across the switch would mix two unrelated videos.
+        self._frame_buffer.clear()
         self._set_status(
             source_type=source_type,
             source=source,
             running=False,
             last_error="",
             last_frame_timestamp_epoch_s=None,
+            frames_decoded=0,
+            frames_ingested=0,
         )
         self.start()
 
@@ -108,9 +129,24 @@ class OpenCVCameraWorker:
 
         raise ValueError(f"Unsupported source_type: {self._source_type}")
 
+    def _publish(self, frame, ts: float, *, ingest: bool) -> None:
+        """Update the preview slot always; feed the inference ring when sampled."""
+        self._frame_buffer.set_preview(resize_max_width(frame, self._preview_max_width))
+        if ingest:
+            self._frame_buffer.append(
+                frame_bgr=resize_shorter_side(
+                    frame,
+                    self._inference_frame_size,
+                    exact=self._ingest_resize_exact,
+                ),
+                timestamp_epoch_s=ts,
+            )
+
     def _run(self) -> None:
         self._set_status(running=True, last_error="")
         last_open_error: str = ""
+        decoded = 0
+        ingested = 0
         while not self._stop_event.is_set():
             cap = None
             try:
@@ -135,6 +171,10 @@ class OpenCVCameraWorker:
                     # instead of returning to an unbounded decode loop.
                     grab_fps = source_fps if 1.0 <= source_fps <= 120.0 else 25.0
                 next_grab_deadline = 0.0
+                ingest_period = (
+                    1.0 / self._ingest_sample_fps if self._ingest_sample_fps > 0 else 0.0
+                )
+                next_ingest_deadline = 0.0
                 while not self._stop_event.is_set():
                     if grab_fps is not None and grab_fps > 0:
                         now = time.time()
@@ -148,8 +188,19 @@ class OpenCVCameraWorker:
                         break
 
                     ts = time.time()
-                    self._frame_buffer.append(frame_bgr=frame, timestamp_epoch_s=ts)
-                    self._set_status(last_frame_timestamp_epoch_s=ts, last_error="")
+                    decoded += 1
+                    # ingest_period == 0 disables decimation and keeps every frame.
+                    should_ingest = ingest_period <= 0.0 or ts >= next_ingest_deadline
+                    if should_ingest:
+                        next_ingest_deadline = ts + ingest_period
+                        ingested += 1
+                    self._publish(frame, ts, ingest=should_ingest)
+                    self._set_status(
+                        last_frame_timestamp_epoch_s=ts,
+                        last_error="",
+                        frames_decoded=decoded,
+                        frames_ingested=ingested,
+                    )
 
                 # Inner loop ended: reopen after backoff.
                 try:
