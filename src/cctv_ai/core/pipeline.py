@@ -213,6 +213,7 @@ class PipelineService:
         else:
             print("[CAMERA] waiting for an uploaded video on the demo page")
 
+        await self._emergency_provider.start()
         self._inference_task = asyncio.create_task(self._inference_loop())
 
     async def stop(self) -> None:
@@ -225,6 +226,7 @@ class PipelineService:
             self._inference_task.cancel()
 
         self._camera_worker.stop()
+        await self._emergency_provider.aclose()
 
         # Let canceled tasks exit cleanly.
         await asyncio.sleep(0)

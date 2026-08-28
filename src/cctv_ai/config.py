@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     EMERGENCY_MODE: Literal["log-only", "remote"] = "log-only"
     ALERT_BACKEND_URL: str = ""
     ALERT_BACKEND_TOKEN: str = ""
+    # How often the background task refreshes the active incident's status from
+    # the hosted backend while a call is in progress. /api/status only ever
+    # reads the cached result, so this never blocks the dashboard.
+    INCIDENT_POLL_INTERVAL_SEC: float = 3.0
 
     VIDEO_UPLOAD_DIR: str = "data/uploads"
 
