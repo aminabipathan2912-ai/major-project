@@ -59,7 +59,13 @@ def load_clip_checkpoint(weights_path: str, *, positive_label: str) -> LoadedCli
     from torchvision.models import EfficientNet_B0_Weights
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    ckpt = torch.load(weights_path, map_location=device, weights_only=False)
+    # The training notebooks save only primitives and tensors, so the safe
+    # loader works. Fall back to the unrestricted loader for any checkpoint it
+    # rejects, so this never becomes a hard requirement on the weights format.
+    try:
+        ckpt = torch.load(weights_path, map_location=device, weights_only=True)
+    except Exception:
+        ckpt = torch.load(weights_path, map_location=device, weights_only=False)
 
     if not isinstance(ckpt, dict) or "state_dict" not in ckpt:
         raise ValueError("Checkpoint must be a dict with a 'state_dict' key from the training notebook.")
@@ -89,23 +95,86 @@ def load_clip_checkpoint(weights_path: str, *, positive_label: str) -> LoadedCli
     )
 
 
-def predict_clip(loaded: LoadedClipModel, clip: ClipInput) -> tuple[str, float, dict[str, Any]]:
+_IMAGENET_MEAN = (0.485, 0.456, 0.406)
+_IMAGENET_STD = (0.229, 0.224, 0.225)
+_RESIZE_SIZE = 256
+_CROP_SIZE = 224
+
+
+def _preprocess_pil(frames: list[np.ndarray], preprocess):
+    """Per-frame PIL path — identical to how the models were trained."""
     import torch
     from PIL import Image
+
+    tensors = []
+    for frame_bgr in frames:
+        rgb = frame_bgr[:, :, ::-1] if frame_bgr.ndim == 3 else frame_bgr
+        tensors.append(preprocess(Image.fromarray(rgb)))
+    return torch.stack(tensors, dim=0)
+
+
+def _preprocess_fast(frames: list[np.ndarray]):
+    """
+    Batched cv2/torch path. Only valid when every frame already has its shorter
+    side at `_RESIZE_SIZE` (the ring buffer downscales to exactly that at
+    ingest), so the training transform's Resize is a no-op and only a
+    centre-crop + normalise remain. Returns None to signal "fall back to PIL"
+    if any frame is a different size.
+    """
+    import torch
+
+    cropped = []
+    for frame_bgr in frames:
+        if frame_bgr.ndim != 3 or frame_bgr.shape[2] != 3:
+            return None
+        h, w = frame_bgr.shape[:2]
+        if min(h, w) != _RESIZE_SIZE or h < _CROP_SIZE or w < _CROP_SIZE:
+            return None
+        top = int(round((h - _CROP_SIZE) / 2.0))
+        left = int(round((w - _CROP_SIZE) / 2.0))
+        crop = frame_bgr[top:top + _CROP_SIZE, left:left + _CROP_SIZE, ::-1]  # BGR->RGB
+        cropped.append(np.ascontiguousarray(crop))
+
+    batch = torch.from_numpy(np.stack(cropped, axis=0))  # [t, 224, 224, 3] uint8
+    batch = batch.permute(0, 3, 1, 2).to(torch.float32).div_(255.0)
+    mean = torch.tensor(_IMAGENET_MEAN, dtype=torch.float32).view(1, 3, 1, 1)
+    std = torch.tensor(_IMAGENET_STD, dtype=torch.float32).view(1, 3, 1, 1)
+    return batch.sub_(mean).div_(std)
+
+
+def sample_and_preprocess_clip(
+    loaded: LoadedClipModel, clip: ClipInput, *, fast: bool = False
+):
+    """
+    Sample `num_frames` evenly across the clip and apply the training transform.
+
+    Returns a CPU tensor shaped ``[1, num_frames, 3, H, W]``. Device placement is
+    left to the caller so a single batch can be shared across models that sit on
+    the same device (accident + violence use the same weights enum and frame
+    count, so the tensor is identical for both).
+
+    `fast=True` uses a batched cv2/torch path; it silently falls back to the PIL
+    path for any clip whose frames are not already at the ingest size.
+    """
+    import torch
 
     frames = even_sample_frames(clip.frames_bgr, loaded.num_frames)
     if not frames:
         raise ValueError("Clip has no frames.")
 
-    tensors = []
-    for frame_bgr in frames:
-        rgb = frame_bgr[:, :, ::-1] if frame_bgr.ndim == 3 else frame_bgr
-        img = Image.fromarray(rgb)
-        tensors.append(loaded.preprocess(img))
+    stacked = _preprocess_fast(frames) if fast else None
+    if stacked is None:
+        stacked = _preprocess_pil(frames, loaded.preprocess)
 
-    batch = torch.stack(tensors, dim=0).unsqueeze(0).to(loaded.device)
+    return stacked.unsqueeze(0)
+
+
+def predict_from_batch(loaded: LoadedClipModel, batch) -> tuple[str, float, dict[str, Any]]:
+    """Run one model on an already sampled + preprocessed clip batch."""
+    import torch
+
     with torch.inference_mode():
-        logits = loaded.model(batch)
+        logits = loaded.model(batch.to(loaded.device))
         probs = torch.softmax(logits, dim=1)[0]
         pred_id = int(torch.argmax(probs).item())
         confidence = float(probs[pred_id].item())
@@ -121,3 +190,7 @@ def predict_clip(loaded: LoadedClipModel, clip: ClipInput) -> tuple[str, float, 
     if loaded.val_acc is not None:
         metadata["train_val_acc"] = loaded.val_acc
     return label, confidence, metadata
+
+
+def predict_clip(loaded: LoadedClipModel, clip: ClipInput) -> tuple[str, float, dict[str, Any]]:
+    return predict_from_batch(loaded, sample_and_preprocess_clip(loaded, clip))

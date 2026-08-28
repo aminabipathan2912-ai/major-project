@@ -47,6 +47,18 @@ class Settings(BaseSettings):
     PREVIEW_MAX_WIDTH: int = 640
     PREVIEW_JPEG_QUALITY: int = 80
 
+    # Torch intra-op threads. The default fans out to every core, which
+    # oversubscribes once two models plus the event loop share the box. 0 keeps
+    # torch's default. Applied once at model-load time.
+    TORCH_NUM_THREADS: int = 0
+
+    # cv2 batched clip preprocessing instead of per-frame PIL. Frames leave the
+    # ring already at INFERENCE_FRAME_SIZE, so this is a centre-crop + normalise
+    # on a single stacked array. Off by default (byte-identical PIL path); turn
+    # on only after scripts/check_preprocess_equivalence.py reports the fast
+    # path is within tolerance on your clips.
+    CLIP_PREPROCESS_FAST: bool = False
+
     ACCIDENT_CONFIDENCE_THRESHOLD: float = 0.6
     ACCIDENT_MIN_HITS: int = 3
     ACCIDENT_WINDOW_SEC: float = 3.0

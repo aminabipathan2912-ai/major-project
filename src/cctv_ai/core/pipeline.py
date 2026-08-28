@@ -83,14 +83,8 @@ class PipelineService:
             "violence": None,
         }
 
-        self._task_accident: asyncio.Task | None = None
-        self._task_violence: asyncio.Task | None = None
+        self._inference_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
-        # EfficientNet forwards are memory-intensive on CPU. The models can
-        # run independently, but not at the same instant on a low-RAM edge
-        # device; serialize them to prevent their activation memory peaking
-        # together.
-        self._inference_lock = asyncio.Lock()
 
     def subscribe_verified_events(self) -> asyncio.Queue[VerifiedEvent]:
         queue: asyncio.Queue[VerifiedEvent] = asyncio.Queue()
@@ -205,8 +199,7 @@ class PipelineService:
         else:
             print("[CAMERA] waiting for an uploaded video on the demo page")
 
-        self._task_accident = asyncio.create_task(self._inference_loop(model=self._accident_model, verifier=self._accident_verifier))
-        self._task_violence = asyncio.create_task(self._inference_loop(model=self._violence_model, verifier=self._violence_verifier))
+        self._inference_task = asyncio.create_task(self._inference_loop())
 
     async def stop(self) -> None:
         if not self._running:
@@ -214,35 +207,51 @@ class PipelineService:
         self._running = False
         self._shutdown_event.set()
 
-        if self._task_accident:
-            self._task_accident.cancel()
-        if self._task_violence:
-            self._task_violence.cancel()
+        if self._inference_task:
+            self._inference_task.cancel()
 
         self._camera_worker.stop()
 
         # Let canceled tasks exit cleanly.
         await asyncio.sleep(0)
 
-    async def _inference_loop(self, *, model, verifier) -> None:
+    async def _inference_loop(self) -> None:
         """
-        Periodically:
-        - sample a temporal clip from FrameBuffer
-        - run model inference
-        - update temporal verifier
-        - if verified, call EmergencyProvider
+        One loop for both video models. Each cycle:
+        - snapshot a single temporal clip from FrameBuffer
+        - sample + preprocess it once, shared across models with the same frame
+          count (accident + violence), instead of each repeating that work
+        - run every loaded model's forward pass on that clip, sequentially
+        - feed each prediction into its verifier; escalate verified events
+
+        Both models judging the *same* snapshot is deliberate: the previous two
+        independent loops drifted apart and scored different clips, which made
+        their confidences incomparable and doubled the sampling + preprocess
+        cost. Running the forwards one after another keeps peak activation
+        memory the same as the old lock-serialized path.
         """
         interval_s = max(0.001, self._settings.INFERENCE_INTERVAL_MS / 1000.0)
-        last_model_loaded_log = 0.0
+        targets = (
+            ("accident", self._accident_model, self._accident_verifier),
+            ("violence", self._violence_model, self._violence_verifier),
+        )
+        last_not_loaded_log: dict[str, float] = {}
+
+        from ..inference.base import ClipInput  # local import to avoid cycles
 
         while self._running and not self._shutdown_event.is_set():
-            status: ModelStatus = model.status()
-            if not status.loaded:
-                # Avoid noisy logs: log at most every 15s per model.
-                now = time.time()
-                if now - last_model_loaded_log > 15:
-                    last_model_loaded_log = now
-                    print(f"[INFERENCE][{status.model_name}] model not loaded: {status.reason}")
+            loaded = []
+            for name, model, verifier in targets:
+                st = model.status()
+                if st.loaded:
+                    loaded.append((name, model, verifier))
+                else:
+                    now = time.time()
+                    if now - last_not_loaded_log.get(name, 0.0) > 15:
+                        last_not_loaded_log[name] = now
+                        print(f"[INFERENCE][{name}] model not loaded: {st.reason}")
+
+            if not loaded:
                 await asyncio.sleep(interval_s)
                 continue
 
@@ -251,61 +260,79 @@ class PipelineService:
                 await asyncio.sleep(interval_s)
                 continue
 
-            frames_bgr = [bf.frame_bgr for bf in clip_frames]
             timestamps = [bf.timestamp_epoch_s for bf in clip_frames]
-            clip_start_time = timestamps[0]
-
-            from ..inference.base import ClipInput  # local import to avoid cycles
-
             clip_input = ClipInput(
-                frames_bgr=frames_bgr,
+                frames_bgr=[bf.frame_bgr for bf in clip_frames],
                 frame_timestamps_epoch_s=timestamps,
-                clip_start_time_epoch_s=clip_start_time,
+                clip_start_time_epoch_s=timestamps[0],
                 camera_id=self._settings.CAMERA_ID,
             )
 
-            try:
-                async with self._inference_lock:
-                    prediction: ModelPrediction | None = await asyncio.to_thread(
-                        model.predict, clip_input
-                    )
-            except Exception as e:
-                # Never crash the pipeline due to one model.
-                print(f"[INFERENCE][{status.model_name}] prediction error: {e}")
-                await asyncio.sleep(interval_s)
-                continue
-
-            if prediction is not None:
-                self._last_predictions[status.model_name] = {
-                    "label": prediction.predicted_label,
-                    "confidence": round(float(prediction.confidence), 4),
-                    "timestamp_epoch_s": prediction.timestamp_epoch_s,
-                    "camera_id": prediction.camera_id,
-                }
+            # Shared sample + preprocess: only when >1 model is loaded and they
+            # agree on frame count. Any failure falls back to per-model predict().
+            shared_batch = None
+            frame_counts = {m.clip_num_frames for _, m, _ in loaded}
+            if len(loaded) > 1 and len(frame_counts) == 1 and None not in frame_counts:
                 try:
-                    verified: VerifiedEvent | None = verifier.update(prediction)
+                    shared_batch = await asyncio.to_thread(
+                        loaded[0][1].preprocess_clip, clip_input
+                    )
                 except Exception as e:
-                    print(f"[EVENT_VERIFICATION][{status.model_name}] verifier error: {e}")
-                    verified = None
+                    print(f"[INFERENCE] shared preprocess failed, per-model path: {e}")
+                    shared_batch = None
 
-                if verified is not None:
-                    if (
-                        self._active_source_type == "file"
-                        and verified.event_type in self._file_escalated_event_types
-                    ):
-                        # Later windows from the same recording are expected
-                        # to overlap. Suppress a second call for the same
-                        # incident type without changing live-camera behavior.
-                        await asyncio.sleep(interval_s)
-                        continue
-                    # Show a verified event immediately. Escalation may wait
-                    # on a remote service, but must not delay the event feed.
-                    await self._broadcast_verified_event(verified)
-                    try:
-                        await self._emergency_provider.on_verified_emergency(verified)
-                    except Exception as e:
-                        print(f"[EMERGENCY] provider error: {e}")
-                    if self._active_source_type == "file":
-                        self._file_escalated_event_types.add(verified.event_type)
+            for name, model, verifier in loaded:
+                try:
+                    if shared_batch is not None:
+                        prediction = await asyncio.to_thread(
+                            model.predict_preprocessed, shared_batch, clip_input
+                        )
+                    else:
+                        prediction = await asyncio.to_thread(model.predict, clip_input)
+                except Exception as e:
+                    # Never crash the pipeline due to one model.
+                    print(f"[INFERENCE][{name}] prediction error: {e}")
+                    continue
+
+                if prediction is not None:
+                    await self._handle_prediction(name, prediction, verifier)
 
             await asyncio.sleep(interval_s)
+
+    async def _handle_prediction(
+        self, name: str, prediction: ModelPrediction, verifier
+    ) -> None:
+        """Record the prediction, run its verifier, escalate a verified event."""
+        self._last_predictions[name] = {
+            "label": prediction.predicted_label,
+            "confidence": round(float(prediction.confidence), 4),
+            "timestamp_epoch_s": prediction.timestamp_epoch_s,
+            "camera_id": prediction.camera_id,
+        }
+        try:
+            verified: VerifiedEvent | None = verifier.update(prediction)
+        except Exception as e:
+            print(f"[EVENT_VERIFICATION][{name}] verifier error: {e}")
+            return
+
+        if verified is None:
+            return
+
+        if (
+            self._active_source_type == "file"
+            and verified.event_type in self._file_escalated_event_types
+        ):
+            # Later windows from the same recording are expected to overlap.
+            # Suppress a second call for the same incident type without
+            # changing live-camera behavior.
+            return
+
+        # Show a verified event immediately. Escalation may wait on a remote
+        # service, but must not delay the event feed.
+        await self._broadcast_verified_event(verified)
+        try:
+            await self._emergency_provider.on_verified_emergency(verified)
+        except Exception as e:
+            print(f"[EMERGENCY] provider error: {e}")
+        if self._active_source_type == "file":
+            self._file_escalated_event_types.add(verified.event_type)

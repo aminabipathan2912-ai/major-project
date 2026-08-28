@@ -5,12 +5,17 @@ import time
 
 from ...core.models import ModelPrediction, ModelStatus
 from ..base import ClipInput, InferenceModel
-from ..clip_classifier import load_clip_checkpoint, predict_clip
+from ..clip_classifier import (
+    load_clip_checkpoint,
+    predict_from_batch,
+    sample_and_preprocess_clip,
+)
 
 
 class AccidentModelAdapter(InferenceModel):
-    def __init__(self, *, weights_path: str) -> None:
+    def __init__(self, *, weights_path: str, preprocess_fast: bool = False) -> None:
         self._weights_path = (weights_path or "").strip()
+        self._preprocess_fast = bool(preprocess_fast)
         self._loaded_model = None
         self._last_error = ""
         self._updated_at = time.time()
@@ -51,16 +56,43 @@ class AccidentModelAdapter(InferenceModel):
             updated_at_epoch_s=self._updated_at,
         )
 
+    @property
+    def clip_num_frames(self) -> int | None:
+        return self._loaded_model.num_frames if self._loaded_model is not None else None
+
+    def preprocess_clip(self, clip: ClipInput):
+        if not self._loaded or self._loaded_model is None:
+            return None
+        return sample_and_preprocess_clip(
+            self._loaded_model, clip, fast=self._preprocess_fast
+        )
+
     def predict(self, clip: ClipInput) -> ModelPrediction | None:
         if not self._loaded or self._loaded_model is None:
             return None
         try:
-            label, confidence, metadata = predict_clip(self._loaded_model, clip)
+            batch = sample_and_preprocess_clip(
+                self._loaded_model, clip, fast=self._preprocess_fast
+            )
+            label, confidence, metadata = predict_from_batch(self._loaded_model, batch)
         except Exception as e:
             self._last_error = str(e)
             self._updated_at = time.time()
             return None
+        return self._to_prediction(label, confidence, metadata, clip)
 
+    def predict_preprocessed(self, batch, clip: ClipInput) -> ModelPrediction | None:
+        if not self._loaded or self._loaded_model is None:
+            return None
+        try:
+            label, confidence, metadata = predict_from_batch(self._loaded_model, batch)
+        except Exception as e:
+            self._last_error = str(e)
+            self._updated_at = time.time()
+            return None
+        return self._to_prediction(label, confidence, metadata, clip)
+
+    def _to_prediction(self, label, confidence, metadata, clip: ClipInput) -> ModelPrediction:
         self._updated_at = time.time()
         return ModelPrediction(
             model_name=self.model_name,

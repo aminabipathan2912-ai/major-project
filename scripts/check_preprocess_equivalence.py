@@ -36,6 +36,7 @@ from PIL import Image  # noqa: E402
 from torchvision.models import EfficientNet_B0_Weights  # noqa: E402
 
 from cctv_ai.camera.frame_scaler import resize_shorter_side  # noqa: E402
+from cctv_ai.inference.clip_classifier import _preprocess_fast  # noqa: E402
 
 PREPROCESS = EfficientNet_B0_Weights.DEFAULT.transforms()
 TARGET_SHORT = 256
@@ -104,6 +105,8 @@ def main() -> int:
     worst_exact = 0.0
     worst_fast = 0.0
     sum_fast = 0.0
+    worst_pp = 0.0
+    sum_pp = 0.0
     exact_bitwise = True
 
     for frame in frames:
@@ -124,7 +127,18 @@ def main() -> int:
         if not torch.equal(got_exact, ref):
             exact_bitwise = False
 
+        # Path D: CLIP_PREPROCESS_FAST — batched cv2/torch centre-crop + normalise
+        # on the already-ingested (exact) frame, vs the per-frame PIL transform
+        # on that same frame. Reference is path B (which is bit-exact vs today).
+        small = resize_shorter_side(frame, TARGET_SHORT, exact=True)
+        pp = _preprocess_fast([small])
+        if pp is not None:
+            d_pp = (pp[0] - got_exact).abs()
+            worst_pp = max(worst_pp, float(d_pp.max()))
+            sum_pp += float(d_pp.mean())
+
     mean_fast = sum_fast / len(frames)
+    mean_pp = sum_pp / len(frames)
 
     # Normalised tensor values sit roughly in [-2.2, 2.7]; state the tolerance in
     # those units rather than pretending a raw number is self-explanatory.
@@ -135,6 +149,10 @@ def main() -> int:
     print("path C  ingest fast (cv2 INTER_AREA)")
     print(f"  max abs diff       : {worst_fast:.3e}")
     print(f"  mean abs diff      : {mean_fast:.3e}")
+    print()
+    print("path D  CLIP_PREPROCESS_FAST (batched cv2 centre-crop + normalise)")
+    print(f"  max abs diff       : {worst_pp:.3e}")
+    print(f"  mean abs diff      : {mean_pp:.3e}")
     print()
 
     small = resize_shorter_side(frames[0], TARGET_SHORT, exact=True)
@@ -155,8 +173,11 @@ def main() -> int:
     print("RESULT: PASS — ingest downscale does not change the model input.")
     print("        models/*.pt remain valid; no retraining implied.")
     if worst_fast > 0:
-        print(f"        Fast mode differs by up to {worst_fast:.3e}; it stays opt-in")
+        print(f"        Ingest fast mode differs by up to {worst_fast:.3e}; opt-in")
         print("        via INGEST_RESIZE_EXACT=false.")
+    print(f"        CLIP_PREPROCESS_FAST differs by up to {worst_pp:.3e} "
+          f"(mean {mean_pp:.3e});")
+    print("        opt-in via CLIP_PREPROCESS_FAST=true.")
     return 0
 
 
