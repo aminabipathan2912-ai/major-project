@@ -14,6 +14,7 @@ from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..camera.phone_stream import KIND_AUDIO, KIND_VIDEO
 from ..config import get_settings
 from ..core.pipeline import PipelineService
 from ..emergency.emergency_service import RemoteEmergencyProvider
@@ -135,6 +136,15 @@ def create_app() -> FastAPI:
     async def index():
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/phone", response_class=FileResponse)
+    async def phone_page():
+        return FileResponse(STATIC_DIR / "phone.html")
+
+    @app.get("/api/phone/config")
+    async def phone_config():
+        pipeline: PipelineService = app.state.pipeline
+        return JSONResponse(pipeline.phone_client_config())
+
     @app.get("/api/status")
     async def status():
         pipeline: PipelineService = app.state.pipeline
@@ -220,6 +230,64 @@ def create_app() -> FastAPI:
             generate(),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
+
+    @app.websocket("/ws/ingest")
+    async def ws_ingest(ws: WebSocket):
+        """
+        Phone browser ingest: binary messages with a 1-byte kind prefix
+        (0x01 video JPEG, 0x02 audio blob), JSON text frames for control.
+
+        Only PHONE_MAX_SESSIONS streams are accepted; a second connection is
+        refused cleanly rather than interleaving two scenes into one clip.
+        Everything past this point is bounded by PhoneStreamSource, so a
+        misbehaving client cannot grow memory here.
+        """
+        pipeline: PipelineService = app.state.pipeline
+        phone = pipeline.phone_source
+
+        await ws.accept()
+        if not phone.try_acquire_session():
+            await ws.send_text(
+                json.dumps({"type": "error", "error": "A phone stream is already connected."})
+            )
+            await ws.close(code=1013)  # try again later
+            return
+
+        await pipeline.switch_to_phone()
+        await ws.send_text(
+            json.dumps({"type": "ready", "config": pipeline.phone_client_config()})
+        )
+        try:
+            while True:
+                message = await ws.receive()
+                if message.get("type") == "websocket.disconnect":
+                    break
+
+                payload = message.get("bytes")
+                if payload:
+                    kind, body = payload[0], payload[1:]
+                    if kind == KIND_VIDEO:
+                        phone.submit_video(body)
+                    elif kind == KIND_AUDIO:
+                        phone.submit_audio(body, "audio/webm")
+                    continue
+
+                text = message.get("text")
+                if text:
+                    try:
+                        control = json.loads(text)
+                    except ValueError:
+                        continue
+                    if control.get("type") == "stop":
+                        break
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:
+            print(f"[PHONE] ingest error: {exc}")
+        finally:
+            phone.release_session()
+            if not phone.has_session:
+                await pipeline.revert_from_phone()
 
     @app.websocket("/ws/events")
     async def ws_events(ws: WebSocket):

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Phone monitor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="phone-body">
+    <header class="phone-top">
+      <p class="kicker">Live source</p>
+      <h1 class="phone-title">Phone monitor</h1>
+      <p class="muted">Streams this camera and microphone to the local detector.</p>
+    </header>
+
+    <main class="phone-main">
+      <section id="secureWarning" class="banner detected" hidden>
+        <p id="incidentTitle">HTTPS REQUIRED</p>
+        <p class="muted">
+          Browsers only grant camera and microphone access on a secure origin.
+          Open this page over HTTPS (for example through a cloudflared or ngrok
+          tunnel) or on http://localhost. No code can work around this.
+        </p>
+      </section>
+
+      <div class="phone-stage">
+        <video id="preview" playsinline muted autoplay></video>
+      </div>
+
+      <p id="phoneStatus" class="phone-status muted">Idle. Tap start to grant camera and mic access.</p>
+
+      <div class="phone-actions">
+        <button type="button" id="startBtn">Start monitoring</button>
+        <button type="button" id="stopBtn" class="quiet-button" hidden>Stop</button>
+      </div>
+
+      <dl class="phone-stats">
+        <div><dt>Sent</dt><dd id="statSent">0</dd></div>
+        <div><dt>Skipped</dt><dd id="statSkipped">0</dd></div>
+        <div><dt>Audio</dt><dd id="statAudio">0</dd></div>
+      </dl>
+
+      <p class="muted phone-foot"><a href="/">Back to dashboard</a></p>
+    </main>
+
+    <script src="/static/phone.js"></script>
+  </body>
+</html>

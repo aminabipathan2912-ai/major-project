@@ -9,7 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    CAMERA_SOURCE_TYPE: Literal["webcam", "rtsp", "file"] = "file"
+    # "phone" is not a startup source: the pipeline switches to it when a phone
+    # browser connects to /ws/ingest, and reverts when it disconnects.
+    CAMERA_SOURCE_TYPE: Literal["webcam", "rtsp", "file", "phone"] = "file"
     CAMERA_SOURCE: str = "tests/fixtures/sample.mp4"
     CAMERA_ID: str = "camera-1"
     INCIDENT_LOCATION: str = "Main Road, test site"
@@ -71,6 +73,21 @@ class Settings(BaseSettings):
     # what is available.
     ACCIDENT_CLIP_WINDOW_SEC: float = 0.0
     VIOLENCE_CLIP_WINDOW_SEC: float = 0.0
+
+    # Phone browser live source (/phone -> WS /ws/ingest).
+    # The first four are echoed to the browser, which encodes frames itself so
+    # the uplink stays small and the server only pays one imdecode per frame.
+    PHONE_SEND_FPS: float = 5.0
+    PHONE_FRAME_MAX_WIDTH: int = 480
+    PHONE_JPEG_QUALITY: float = 0.7
+    PHONE_AUDIO_CHUNK_MS: int = 1000
+    # Server-side bounds. These hold regardless of what the client does.
+    PHONE_FRAME_QUEUE_MAX: int = 4
+    PHONE_AUDIO_BUFFER_MAX: int = 8
+    PHONE_MAX_MESSAGE_BYTES: int = 1048576
+    # Two streams into one FrameBuffer would interleave two scenes into a single
+    # clip and corrupt inference, so the second connection is refused cleanly.
+    PHONE_MAX_SESSIONS: int = 1
 
     ACCIDENT_CONFIDENCE_THRESHOLD: float = 0.6
     ACCIDENT_MIN_HITS: int = 3

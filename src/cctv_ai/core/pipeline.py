@@ -7,7 +7,9 @@ from typing import Any
 
 from ..camera.camera_factory import create_camera_worker
 from ..camera.frame_buffer import FrameBuffer
+from ..camera.phone_stream import PhoneStreamSource
 from ..config import Settings
+from ..inference.audio.audio_buffer import AudioBuffer
 from ..core.models import ModelPrediction, ModelStatus, VerifiedEvent
 from ..emergency.emergency_service import EmergencyProvider, create_emergency_provider
 from ..event_engine.verifier import TemporalVerificationConfig, TemporalVerifier
@@ -22,6 +24,7 @@ class PipelineStatus:
     last_predictions: dict[str, Any]
     running: bool
     sampling: dict[str, Any] | None = None
+    phone: dict[str, Any] | None = None
 
 
 class PipelineService:
@@ -49,6 +52,23 @@ class PipelineService:
             ingest_sample_fps=settings.INGEST_SAMPLE_FPS,
             preview_max_width=settings.PREVIEW_MAX_WIDTH,
         )
+
+        # Phone browser source. Constructed eagerly (cheap: no threads, no
+        # sockets until a browser connects) so /api/status can always report it.
+        self._audio_buffer = AudioBuffer(maxlen=settings.PHONE_AUDIO_BUFFER_MAX)
+        self._phone_source = PhoneStreamSource(
+            frame_buffer=self._frame_buffer,
+            audio_buffer=self._audio_buffer,
+            inference_frame_size=settings.INFERENCE_FRAME_SIZE,
+            ingest_resize_exact=settings.INGEST_RESIZE_EXACT,
+            preview_max_width=settings.PREVIEW_MAX_WIDTH,
+            frame_queue_max=settings.PHONE_FRAME_QUEUE_MAX,
+            max_message_bytes=settings.PHONE_MAX_MESSAGE_BYTES,
+            max_sessions=settings.PHONE_MAX_SESSIONS,
+        )
+        # What to return to when the phone disconnects.
+        self._prev_source_type = self._active_source_type
+        self._prev_source = self._active_source
 
         self._accident_model, self._violence_model, self._audio_model = create_models(settings)
 
@@ -158,28 +178,96 @@ class PipelineService:
         """
         self._active_source_type = "file"
         self._active_source = path
+        self._prev_source_type = "file"
+        self._prev_source = path
         self._file_escalated_event_types.clear()
         await asyncio.to_thread(
             self._camera_worker.restart_with, source_type="file", source=path
         )
 
+    # ------------------------------------------------------------------
+    # Phone browser source
+    # ------------------------------------------------------------------
+
+    @property
+    def phone_source(self) -> PhoneStreamSource:
+        return self._phone_source
+
+    async def switch_to_phone(self) -> None:
+        """
+        Hand the pipeline over to the phone stream.
+
+        The OpenCV worker is stopped (in a thread — it joins its capture thread)
+        so the two sources can never interleave frames from two different scenes
+        into a single clip.
+        """
+        if self._active_source_type == "phone":
+            return
+        self._prev_source_type = self._active_source_type
+        self._prev_source = self._active_source
+        await asyncio.to_thread(self._camera_worker.stop)
+        self._frame_buffer.clear()
+        self._audio_buffer.clear()
+        self._active_source_type = "phone"
+        self._active_source = "phone"
+        self._file_escalated_event_types.clear()
+        self._phone_source.start()
+        print("[PHONE] live source active")
+
+    async def revert_from_phone(self) -> None:
+        """
+        Return to whatever source was active before the phone connected.
+
+        A finished file is deliberately *not* restarted: replaying it would
+        re-detect the same incident and escalate a second time. The existing
+        `_file_escalated_event_types` suppression is preserved by leaving the
+        recorded clip's escalation state alone.
+        """
+        if self._active_source_type != "phone":
+            return
+        self._phone_source.stop()
+        self._frame_buffer.clear()
+        self._audio_buffer.clear()
+        self._active_source_type = self._prev_source_type
+        self._active_source = self._prev_source
+        if self._prev_source_type in ("webcam", "rtsp"):
+            await asyncio.to_thread(
+                self._camera_worker.restart_with,
+                source_type=self._prev_source_type,
+                source=self._prev_source,
+            )
+        print(f"[PHONE] disconnected; source reverted to {self._prev_source_type}")
+
     def get_status(self) -> PipelineStatus:
-        cam_status = self._camera_worker.status
+        if self._active_source_type == "phone":
+            src_status = self._phone_source.status
+        else:
+            src_status = self._camera_worker.status
         models = {
             "accident": self._accident_model.status(),
             "violence": self._violence_model.status(),
             "audio": self._audio_model.status(),
         }
+        phone_status = self._phone_source.status
         return PipelineStatus(
             camera={
-                "source_type": cam_status.source_type,
-                "source": cam_status.source,
-                "running": cam_status.running,
-                "last_error": cam_status.last_error,
-                "last_frame_timestamp_epoch_s": cam_status.last_frame_timestamp_epoch_s,
-                "frames_decoded": cam_status.frames_decoded,
-                "frames_ingested": cam_status.frames_ingested,
+                "source_type": src_status.source_type,
+                "source": src_status.source,
+                "running": src_status.running,
+                "last_error": src_status.last_error,
+                "last_frame_timestamp_epoch_s": src_status.last_frame_timestamp_epoch_s,
+                "frames_decoded": src_status.frames_decoded,
+                "frames_ingested": src_status.frames_ingested,
                 "buffered_frames": len(self._frame_buffer),
+            },
+            phone={
+                "connected": self._phone_source.has_session,
+                "active": self._active_source_type == "phone",
+                "sessions": phone_status.sessions,
+                "frames_dropped": phone_status.frames_dropped,
+                "rejected_messages": phone_status.rejected_messages,
+                "audio_chunks": phone_status.audio_chunks,
+                "audio": phone_status.audio,
             },
             models=models,
             verification={
@@ -225,11 +313,22 @@ class PipelineService:
         if self._inference_task:
             self._inference_task.cancel()
 
+        self._phone_source.stop()
         self._camera_worker.stop()
         await self._emergency_provider.aclose()
 
         # Let canceled tasks exit cleanly.
         await asyncio.sleep(0)
+
+    def phone_client_config(self) -> dict[str, Any]:
+        """Capture knobs the /phone page reads, so sampling stays env-driven."""
+        return {
+            "send_fps": self._settings.PHONE_SEND_FPS,
+            "frame_max_width": self._settings.PHONE_FRAME_MAX_WIDTH,
+            "jpeg_quality": self._settings.PHONE_JPEG_QUALITY,
+            "audio_chunk_ms": self._settings.PHONE_AUDIO_CHUNK_MS,
+            "max_message_bytes": self._settings.PHONE_MAX_MESSAGE_BYTES,
+        }
 
     async def _inference_loop(self) -> None:
         """

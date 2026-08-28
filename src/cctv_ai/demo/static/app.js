@@ -10,6 +10,7 @@ const refreshBtn = document.getElementById("refreshBtn");
 const uploadForm = document.getElementById("uploadForm");
 const videoFile = document.getElementById("videoFile");
 const uploadStatus = document.getElementById("uploadStatus");
+const phoneState = document.getElementById("phoneState");
 const incidentBanner = document.getElementById("incidentBanner");
 const incidentTitle = document.getElementById("incidentTitle");
 const incidentMeta = document.getElementById("incidentMeta");
@@ -173,6 +174,12 @@ async function refreshStatus() {
   renderModels(data.models || {});
   renderReadout(data.last_predictions || {});
   renderIncident(data.latest_incident);
+
+  const phone = data.phone || {};
+  phoneState.className = "badge " + (phone.active ? "ok" : "");
+  phoneState.textContent = phone.active
+    ? `Phone live${phone.frames_dropped ? ` · ${phone.frames_dropped} dropped` : ""}`
+    : "Phone idle";
 
   if (data.playback && data.playback.file_available && cam.source_type === "file" && (!usingFilePlayer || activeVideoSource !== cam.source)) {
     showFilePlayer(cam.source);

@@ -4,6 +4,7 @@ import time
 
 from ...core.models import ModelPrediction, ModelStatus
 from ..base import ClipInput, InferenceModel
+from .audio_buffer import AudioChunk
 
 
 class AudioModelAdapter(InferenceModel):
@@ -12,6 +13,11 @@ class AudioModelAdapter(InferenceModel):
 
     This stub ensures the pipeline has a clean integration point,
     without assuming any dataset/provider/model yet.
+
+    `predict_audio` is the seam a real classifier drops into: the phone source
+    already collects bounded audio chunks and `AUDIO_EVENT` already exists in
+    `EventType`, so the escalation path is wired but inert. Nothing here
+    fabricates a prediction — it returns `None` until a real model exists.
     """
 
     def __init__(self) -> None:
@@ -34,3 +40,14 @@ class AudioModelAdapter(InferenceModel):
         self._updated_at = time.time()
         return None
 
+    def predict_audio(self, chunks: list[AudioChunk]) -> ModelPrediction | None:
+        """
+        Classify recent audio. Returns `None` until a real model is wired in.
+
+        A future implementation decodes `chunk.data` (per `chunk.mime_type`),
+        runs its classifier, and returns a `ModelPrediction` with
+        `model_name="audio"`; the existing verifier + emergency path then handles
+        it exactly like the video models.
+        """
+        self._updated_at = time.time()
+        return None
