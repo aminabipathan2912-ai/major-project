@@ -1,1 +1,1 @@
-__all__ = ["verifier"]
+__all__ = ["verifier", "fusion"]

@@ -9,10 +9,10 @@
   <body>
     <header class="top">
       <div class="brand-block">
-        <p class="kicker">CCTV / Incident monitor</p>
-        <h1>Accident and violence<br />detection.</h1>
+        <p class="kicker">Incident monitor</p>
+        <h1>Accident and violence detection</h1>
       </div>
-      <p class="top-note">Local video inference<br />with verified escalation</p>
+      <p class="top-note">Local video inference with verified escalation</p>
     </header>
 
     <section id="incidentBanner" class="banner" hidden>
@@ -52,6 +52,25 @@
           <h2>Latest readout</h2>
           <div id="readout" class="readout">
             <p class="muted">No predictions yet.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Text report</h2>
+          <form id="textForm" class="upload">
+            <input id="textInput" type="text" placeholder="Helpline or social message…" />
+            <button type="submit">Submit</button>
+          </form>
+          <p id="textStatus" class="muted"></p>
+        </section>
+
+        <section class="panel" id="fusionPanel" hidden>
+          <div class="panel-head">
+            <h2>Fusion</h2>
+            <span id="fusionMode" class="badge"></span>
+          </div>
+          <div id="fusionBody" class="readout">
+            <p class="muted">No evidence yet.</p>
           </div>
         </section>
 

@@ -168,7 +168,7 @@ def main() -> int:
     # ---------------- forward passes ----------------
     from cctv_ai.inference.loader import create_models
 
-    accident, violence, _audio = create_models(settings)
+    accident, violence, *_ = create_models(settings)
     batch = build(small)
 
     loaded = {}

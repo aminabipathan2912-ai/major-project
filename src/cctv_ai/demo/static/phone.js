@@ -29,7 +29,8 @@ let config = {
 
 let ws = null;
 let stream = null;
-let recorder = null;
+let audioCtx = null;
+let processor = null;
 let sendTimer = null;
 let canvas = null;
 let ctx = null;
@@ -107,24 +108,74 @@ function captureFrame() {
   );
 }
 
+// Raw PCM rather than MediaRecorder/Opus. The server then needs no audio
+// decoder (no ffmpeg, no torchaudio), the sample rate is known and fixed, and
+// the classifier sees the untouched signal. Int16 at 16 kHz mono is ~32 KB/s.
+const TARGET_SAMPLE_RATE = 16000;
+
 function startAudio() {
-  if (!window.MediaRecorder) return;
   const tracks = stream.getAudioTracks();
   if (!tracks.length) return;
+
   try {
-    recorder = new MediaRecorder(stream);
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   } catch (err) {
     return; // Audio is optional; video detection continues without it.
   }
-  recorder.ondataavailable = async (ev) => {
-    if (!ev.data || !ev.data.size) return;
+
+  const source = audioCtx.createMediaStreamSource(stream);
+  // ScriptProcessor is deprecated but is the only node available without
+  // serving a separate AudioWorklet module file; the work here is trivial.
+  const bufferSize = 4096;
+  processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+
+  const chunkSamples = Math.round(
+    (TARGET_SAMPLE_RATE * config.audio_chunk_ms) / 1000
+  );
+  let pending = [];
+  let pendingLength = 0;
+
+  processor.onaudioprocess = (ev) => {
+    if (!running) return;
+    const input = ev.inputBuffer.getChannelData(0);
+    const ratio = ev.inputBuffer.sampleRate / TARGET_SAMPLE_RATE;
+
+    // Decimate to the model's sample rate. Nearest-sample is adequate: the
+    // mel front-end integrates over 25 ms windows regardless.
+    const outLength = Math.floor(input.length / ratio);
+    const out = new Int16Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      const s = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)]));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    pending.push(out);
+    pendingLength += outLength;
+
+    if (pendingLength < chunkSamples) return;
+
+    const merged = new Int16Array(pendingLength);
+    let off = 0;
+    for (const part of pending) {
+      merged.set(part, off);
+      off += part.length;
+    }
+    pending = [];
+    pendingLength = 0;
+
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (ws.bufferedAmount > MAX_BUFFERED_BYTES) return;
-    ws.send(prefixed(KIND_AUDIO, await ev.data.arrayBuffer()));
+    ws.send(prefixed(KIND_AUDIO, merged.buffer));
     stats.audio += 1;
     renderStats();
   };
-  recorder.start(config.audio_chunk_ms);
+
+  source.connect(processor);
+  // ScriptProcessor only fires while connected to a destination. Routing it
+  // through a muted gain node keeps it alive without echoing to the speaker.
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0;
+  processor.connect(mute);
+  mute.connect(audioCtx.destination);
 }
 
 async function start() {
@@ -137,7 +188,17 @@ async function start() {
     // the prompt itself and for mobile autoplay policy.
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment" },
-      audio: true,
+      // The browser's voice-call defaults are actively harmful for acoustic
+      // event detection, so all three are turned off:
+      //   autoGainControl  normalises loudness — a scream's defining feature
+      //   noiseSuppression is tuned to keep speech and discard everything else
+      //   echoCancellation cancels audio the device is also playing, which
+      //                    silently defeats testing with a played-back clip
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
     });
   } catch (err) {
     setStatus(`Permission denied or no camera: ${err.message}`, true);
@@ -189,14 +250,23 @@ function stop() {
     clearInterval(sendTimer);
     sendTimer = null;
   }
-  if (recorder && recorder.state !== "inactive") {
+  if (processor) {
     try {
-      recorder.stop();
+      processor.disconnect();
+      processor.onaudioprocess = null;
     } catch (err) {
-      /* already stopped */
+      /* already torn down */
     }
   }
-  recorder = null;
+  processor = null;
+  if (audioCtx) {
+    try {
+      audioCtx.close();
+    } catch (err) {
+      /* already closed */
+    }
+  }
+  audioCtx = null;
   if (ws && ws.readyState === WebSocket.OPEN) {
     try {
       ws.send(JSON.stringify({ type: "stop" }));

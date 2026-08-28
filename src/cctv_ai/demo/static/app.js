@@ -11,6 +11,9 @@ const uploadForm = document.getElementById("uploadForm");
 const videoFile = document.getElementById("videoFile");
 const uploadStatus = document.getElementById("uploadStatus");
 const phoneState = document.getElementById("phoneState");
+const fusionPanel = document.getElementById("fusionPanel");
+const fusionMode = document.getElementById("fusionMode");
+const fusionBody = document.getElementById("fusionBody");
 const incidentBanner = document.getElementById("incidentBanner");
 const incidentTitle = document.getElementById("incidentTitle");
 const incidentMeta = document.getElementById("incidentMeta");
@@ -68,7 +71,7 @@ filePlayer.addEventListener("error", () => {
 });
 
 function renderModels(models) {
-  const order = ["accident", "violence", "audio"];
+  const order = ["accident", "violence", "audio", "text"];
   modelsEl.innerHTML = "";
   for (const key of order) {
     const m = models[key];
@@ -86,7 +89,7 @@ function renderModels(models) {
 
 function renderReadout(preds) {
   const parts = [];
-  for (const key of ["accident", "violence"]) {
+  for (const key of ["accident", "violence", "audio", "text"]) {
     const p = preds && preds[key];
     if (!p) continue;
     parts.push(
@@ -106,6 +109,37 @@ function renderEvents() {
     .map((e) => {
       const conf = e.confidence != null ? `${(e.confidence * 100).toFixed(1)}%` : "";
       return `<li class="event"><time>${fmtTime(e.timestamp_epoch_s)}</time><strong>${e.event_type || e.verified_label}</strong> ${conf}<div class="muted">${e.camera_id || ""}</div></li>`;
+    })
+    .join("");
+}
+
+// Fusion is the explainable part of the system: show not just the fused score
+// but which modalities agreed and, when it did not fire, why.
+function renderFusion(fusion) {
+  if (!fusion || !fusion.enabled) {
+    fusionPanel.hidden = true;
+    return;
+  }
+  fusionPanel.hidden = false;
+  fusionMode.textContent = `needs ${fusion.min_modalities} modalities`;
+
+  const rows = Object.entries(fusion.last || {});
+  if (!rows.length) {
+    fusionBody.innerHTML = '<p class="muted">No evidence yet.</p>';
+    return;
+  }
+  fusionBody.innerHTML = rows
+    .map(([type, o]) => {
+      const parts = Object.entries(o.contributions || {})
+        .map(([m, c]) => `${m.replace("video_", "")} ${(c * 100).toFixed(0)}%`)
+        .join(", ");
+      const cls = o.fired ? "ok" : "";
+      return `<p><strong>${type}</strong>
+        <span class="conf">${(o.fused_score * 100).toFixed(1)}%</span></p>
+        <p class="muted fusion-detail"><span class="badge ${cls}">${
+          o.fired ? "escalated" : o.reason
+        }</span></p>
+        <p class="muted fusion-detail">${parts || "no readings"}</p>`;
     })
     .join("");
 }
@@ -174,6 +208,7 @@ async function refreshStatus() {
   renderModels(data.models || {});
   renderReadout(data.last_predictions || {});
   renderIncident(data.latest_incident);
+  renderFusion(data.fusion);
 
   const phone = data.phone || {};
   phoneState.className = "badge " + (phone.active ? "ok" : "");
@@ -190,6 +225,33 @@ async function refreshStatus() {
     playerHint.textContent = cam.last_error;
   }
 }
+
+const textForm = document.getElementById("textForm");
+const textInput = document.getElementById("textInput");
+const textStatus = document.getElementById("textStatus");
+
+textForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const text = textInput.value.trim();
+  if (!text) return;
+  textStatus.textContent = "Classifying…";
+  const res = await fetch("/api/text", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    textStatus.textContent = data.error || "Text model unavailable.";
+    return;
+  }
+  const cov = data.metadata && data.metadata.vocab_coverage;
+  textStatus.textContent =
+    `${data.label} ${(data.confidence * 100).toFixed(1)}%` +
+    (cov != null ? ` · ${(cov * 100).toFixed(0)}% of words known` : "");
+  textInput.value = "";
+  refreshStatus();
+});
 
 refreshBtn.addEventListener("click", refreshStatus);
 uploadForm.addEventListener("submit", async (ev) => {

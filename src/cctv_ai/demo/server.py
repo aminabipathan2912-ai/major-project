@@ -10,7 +10,7 @@ from typing import Any
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -199,6 +199,26 @@ def create_app() -> FastAPI:
             }
         )
 
+    @app.post("/api/text")
+    async def submit_text(payload: dict = Body(...)):
+        """
+        Text modality ingest: a helpline transcript or social post.
+
+        The classification feeds fusion as corroborating evidence; text alone
+        does not escalate.
+        """
+        pipeline: PipelineService = app.state.pipeline
+        text = str(payload.get("text", "")).strip()
+        if not text:
+            return JSONResponse({"ok": False, "error": "Empty text."}, status_code=400)
+        if len(text) > 2000:
+            return JSONResponse(
+                {"ok": False, "error": "Text too long (max 2000 chars)."},
+                status_code=400,
+            )
+        result = await pipeline.submit_text(text)
+        return JSONResponse(result, status_code=200 if result.get("ok") else 503)
+
     @app.get("/api/video")
     async def video_file():
         pipeline: PipelineService = app.state.pipeline
@@ -269,7 +289,9 @@ def create_app() -> FastAPI:
                     if kind == KIND_VIDEO:
                         phone.submit_video(body)
                     elif kind == KIND_AUDIO:
-                        phone.submit_audio(body, "audio/webm")
+                        # Raw Int16 mono PCM at the model's sample rate — the
+                        # browser resamples, so nothing needs decoding here.
+                        phone.submit_audio(body, "audio/pcm;rate=16000;bits=16")
                     continue
 
                 text = message.get("text")

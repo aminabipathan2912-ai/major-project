@@ -47,6 +47,30 @@ def test_verifier_requires_persistence(monkeypatch: pytest.MonkeyPatch):
     assert verified.verified_label == "ACCIDENT"
 
 
+def test_scream_verifier_emits_violence_event(monkeypatch: pytest.MonkeyPatch):
+    """A lone scream escalates on its own, as a VIOLENCE event the hosted
+    backend accepts, while keeping SCREAM as the traceable verified_label."""
+    now = 3_000.0
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    verifier = TemporalVerifier(
+        config=TemporalVerificationConfig(
+            confidence_threshold=0.6,
+            min_hits=2,
+            window_sec=6.0,
+            cooldown_sec=30.0,
+            positive_label="SCREAM",
+        )
+    )
+
+    assert verifier.update(_pred(label="SCREAM", conf=0.8, ts=now, model_name="audio")) is None
+    now += 1.0
+    verified = verifier.update(_pred(label="SCREAM", conf=0.8, ts=now, model_name="audio"))
+    assert verified is not None
+    assert verified.event_type == "VIOLENCE"
+    assert verified.verified_label == "SCREAM"
+
+
 def test_verifier_cooldown_blocks_repeated_emergency(monkeypatch: pytest.MonkeyPatch):
     now = 2_000.0
     monkeypatch.setattr(time, "time", lambda: now)

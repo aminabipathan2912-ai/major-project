@@ -6,6 +6,7 @@ from ..config import Settings
 from .accident.model_adapter import AccidentModelAdapter
 from .violence.model_adapter import ViolenceModelAdapter
 from .audio.model_adapter import AudioModelAdapter
+from .text.model_adapter import TextModelAdapter
 
 _torch_tuned = False
 
@@ -62,6 +63,12 @@ def create_models(settings: Settings):
         accident = accident_future.result()
         violence = violence_future.result()
 
-    audio = AudioModelAdapter()
+    # Small checkpoints (or absent); loading them serially costs nothing.
+    audio = AudioModelAdapter(
+        weights_path=getattr(settings, "AUDIO_MODEL_WEIGHTS_PATH", "")
+    )
+    text = TextModelAdapter(
+        weights_path=getattr(settings, "TEXT_MODEL_WEIGHTS_PATH", "")
+    )
 
-    return accident, violence, audio
+    return accident, violence, audio, text

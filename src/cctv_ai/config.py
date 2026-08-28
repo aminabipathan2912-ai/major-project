@@ -99,8 +99,63 @@ class Settings(BaseSettings):
     VIOLENCE_WINDOW_SEC: float = 3.0
     VIOLENCE_COOLDOWN_SEC: float = 20.0
 
+    # Decision-level multimodal fusion.
+    #
+    # Fusion is ADDITIVE, not a gate. Each modality that has its own verifier
+    # (video accident, video violence, audio scream) still escalates on its own.
+    # With fusion enabled, a corroborated combination can ALSO escalate — and the
+    # dashboard panel explains which modalities agreed. It never suppresses an
+    # independent single-modality escalation.
+    FUSION_ENABLED: bool = False
+    # How long a modality's reading stays usable as corroboration.
+    FUSION_WINDOW_SEC: float = 5.0
+    # Independent modalities that must agree before escalation.
+    FUSION_MIN_MODALITIES: int = 2
+    # Confidence one modality needs before it counts as "supporting".
+    FUSION_SUPPORT_THRESHOLD: float = 0.6
+    # Weighted-mean score the combined evidence must reach.
+    FUSION_THRESHOLD: float = 0.6
+    FUSION_COOLDOWN_SEC: float = 30.0
+    # Minimum gap between two escalations of the SAME event type, across every
+    # path (a video verifier, the audio verifier, or fusion). Stops the
+    # independent path and the fusion path both calling for one incident.
+    ESCALATION_COOLDOWN_SEC: float = 30.0
+    # Relative trust per modality. Text is weighted lower: it carries context
+    # rather than direct observation.
+    FUSION_WEIGHT_VIDEO: float = 1.0
+    FUSION_WEIGHT_AUDIO: float = 1.0
+    FUSION_WEIGHT_TEXT: float = 0.5
+
     ACCIDENT_MODEL_WEIGHTS_PATH: str = "models/accident_best.pt"
     VIOLENCE_MODEL_WEIGHTS_PATH: str = "models/violence_best.pt"
+    # Audio and text weights. Empty (the default) means the modality reports
+    # "not loaded" and produces no predictions — it never guesses.
+    AUDIO_MODEL_WEIGHTS_PATH: str = ""
+    TEXT_MODEL_WEIGHTS_PATH: str = ""
+
+    # How often buffered phone audio is classified, and the positive label the
+    # audio model emits. Audio is evidence of distress generally, so it
+    # corroborates both accident and violence rather than defining its own type.
+    AUDIO_INFERENCE_INTERVAL_MS: int = 1000
+    AUDIO_CONFIDENCE_THRESHOLD: float = 0.6
+    # Below this loudness a chunk is treated as silence and skipped, so the
+    # model is not run on (and cannot hallucinate from) an empty room.
+    AUDIO_MIN_DBFS: float = -55.0
+    # Audio escalates on its own, like the video models: a scream must persist
+    # across AUDIO_MIN_HITS classifications inside AUDIO_WINDOW_SEC before it
+    # calls out, then holds off for AUDIO_COOLDOWN_SEC. A lone scream is reported
+    # as a VIOLENCE event (the label the hosted backend accepts); verified_label
+    # stays "SCREAM" so the origin is visible.
+    AUDIO_MIN_HITS: int = 2
+    AUDIO_WINDOW_SEC: float = 6.0
+    AUDIO_COOLDOWN_SEC: float = 30.0
+
+    TEXT_CONFIDENCE_THRESHOLD: float = 0.6
+    # Fraction of a message's tokens the model must actually know before its
+    # prediction is trusted as evidence. A softmax over an all-unknown sentence
+    # still returns a confident label — the text equivalent of the video models
+    # confidently classifying a scene they were never trained on.
+    TEXT_MIN_VOCAB_COVERAGE: float = 0.5
 
     # remote posts verified events to the lightweight hosted alert backend.
     EMERGENCY_MODE: Literal["log-only", "remote"] = "log-only"
