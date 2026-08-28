@@ -67,6 +67,35 @@ class FrameBuffer:
             frames = list(self._frames)[-n:]
         return frames
 
+    def snapshot_window(self, window_sec: float, count: int) -> list[BufferedFrame]:
+        """
+        `count` frames spread evenly (endpoints included) across the most recent
+        `window_sec` seconds of buffered frames.
+
+        `window_sec <= 0` is a sentinel meaning "keep the old behaviour" and
+        returns exactly `snapshot_last_n(count)` — the last `count` consecutive
+        frames. A positive value instead samples across the trailing window, so a
+        clip covers the whole inference interval rather than the ~0.3 s tail of
+        it. Falls back to whatever is available when the buffer holds less than
+        `window_sec` or fewer than `count` frames in the window.
+        """
+        if count <= 0:
+            return []
+        if window_sec <= 0:
+            return self.snapshot_last_n(count)
+
+        with self._lock:
+            if not self._frames:
+                return []
+            frames = list(self._frames)
+
+        start_ts = frames[-1].timestamp_epoch_s - float(window_sec)
+        windowed = [f for f in frames if f.timestamp_epoch_s >= start_ts]
+        if len(windowed) <= count:
+            return windowed
+        idxs = np.linspace(0, len(windowed) - 1, count).astype(int)
+        return [windowed[int(i)] for i in idxs]
+
     def clear(self) -> None:
         """Drop retained frames so a new source cannot inherit the previous scene."""
         with self._lock:

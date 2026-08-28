@@ -21,6 +21,7 @@ class PipelineStatus:
     verification: dict[str, Any]
     last_predictions: dict[str, Any]
     running: bool
+    sampling: dict[str, Any] | None = None
 
 
 class PipelineService:
@@ -187,7 +188,20 @@ class PipelineService:
             },
             last_predictions=self._last_predictions,
             running=self._running,
+            sampling={
+                "clip_frame_count": self._settings.CLIP_FRAME_COUNT,
+                "accident_window_sec": self._model_window_sec("accident"),
+                "violence_window_sec": self._model_window_sec("violence"),
+            },
         )
+
+    def _model_window_sec(self, name: str) -> float:
+        """Clip window for a model. 0 == last-N (unchanged) behaviour."""
+        if name == "accident":
+            return max(0.0, float(self._settings.ACCIDENT_CLIP_WINDOW_SEC))
+        if name == "violence":
+            return max(0.0, float(self._settings.VIOLENCE_CLIP_WINDOW_SEC))
+        return 0.0
 
     async def start(self) -> None:
         if self._running:
@@ -229,6 +243,11 @@ class PipelineService:
         their confidences incomparable and doubled the sampling + preprocess
         cost. Running the forwards one after another keeps peak activation
         memory the same as the old lock-serialized path.
+
+        Per-model clip windows (ACCIDENT_/VIOLENCE_CLIP_WINDOW_SEC) break the
+        sharing only when the two models are configured differently: then each
+        samples its own clip and runs its own preprocess. With both at the
+        default 0 the shared single-snapshot path above is used unchanged.
         """
         interval_s = max(0.001, self._settings.INFERENCE_INTERVAL_MS / 1000.0)
         targets = (
@@ -236,8 +255,6 @@ class PipelineService:
             ("violence", self._violence_model, self._violence_verifier),
         )
         last_not_loaded_log: dict[str, float] = {}
-
-        from ..inference.base import ClipInput  # local import to avoid cycles
 
         while self._running and not self._shutdown_event.is_set():
             loaded = []
@@ -255,49 +272,76 @@ class PipelineService:
                 await asyncio.sleep(interval_s)
                 continue
 
-            clip_frames = self._frame_buffer.snapshot_last_n(self._settings.CLIP_FRAME_COUNT)
-            if len(clip_frames) < 2:
-                await asyncio.sleep(interval_s)
-                continue
+            windows = {name: self._model_window_sec(name) for name, _, _ in loaded}
 
-            timestamps = [bf.timestamp_epoch_s for bf in clip_frames]
-            clip_input = ClipInput(
-                frames_bgr=[bf.frame_bgr for bf in clip_frames],
-                frame_timestamps_epoch_s=timestamps,
-                clip_start_time_epoch_s=timestamps[0],
-                camera_id=self._settings.CAMERA_ID,
-            )
-
-            # Shared sample + preprocess: only when >1 model is loaded and they
-            # agree on frame count. Any failure falls back to per-model predict().
-            shared_batch = None
-            frame_counts = {m.clip_num_frames for _, m, _ in loaded}
-            if len(loaded) > 1 and len(frame_counts) == 1 and None not in frame_counts:
-                try:
-                    shared_batch = await asyncio.to_thread(
-                        loaded[0][1].preprocess_clip, clip_input
-                    )
-                except Exception as e:
-                    print(f"[INFERENCE] shared preprocess failed, per-model path: {e}")
-                    shared_batch = None
-
-            for name, model, verifier in loaded:
-                try:
-                    if shared_batch is not None:
-                        prediction = await asyncio.to_thread(
-                            model.predict_preprocessed, shared_batch, clip_input
-                        )
-                    else:
+            if len(set(windows.values())) == 1:
+                await self._run_shared(loaded, next(iter(windows.values())))
+            else:
+                for name, model, verifier in loaded:
+                    clip_input = self._snapshot_clip(windows[name])
+                    if clip_input is None:
+                        continue
+                    try:
                         prediction = await asyncio.to_thread(model.predict, clip_input)
-                except Exception as e:
-                    # Never crash the pipeline due to one model.
-                    print(f"[INFERENCE][{name}] prediction error: {e}")
-                    continue
-
-                if prediction is not None:
-                    await self._handle_prediction(name, prediction, verifier)
+                    except Exception as e:
+                        print(f"[INFERENCE][{name}] prediction error: {e}")
+                        continue
+                    if prediction is not None:
+                        await self._handle_prediction(name, prediction, verifier)
 
             await asyncio.sleep(interval_s)
+
+    def _snapshot_clip(self, window_sec: float):
+        """Build a ClipInput from the buffer, or None if too few frames yet."""
+        from ..inference.base import ClipInput  # local import to avoid cycles
+
+        frames = self._frame_buffer.snapshot_window(
+            window_sec, self._settings.CLIP_FRAME_COUNT
+        )
+        if len(frames) < 2:
+            return None
+        timestamps = [bf.timestamp_epoch_s for bf in frames]
+        return ClipInput(
+            frames_bgr=[bf.frame_bgr for bf in frames],
+            frame_timestamps_epoch_s=timestamps,
+            clip_start_time_epoch_s=timestamps[0],
+            camera_id=self._settings.CAMERA_ID,
+        )
+
+    async def _run_shared(self, loaded, window_sec: float) -> None:
+        """One snapshot, one preprocess, shared across every loaded model."""
+        clip_input = self._snapshot_clip(window_sec)
+        if clip_input is None:
+            return
+
+        # Shared sample + preprocess: only when >1 model is loaded and they
+        # agree on frame count. Any failure falls back to per-model predict().
+        shared_batch = None
+        frame_counts = {m.clip_num_frames for _, m, _ in loaded}
+        if len(loaded) > 1 and len(frame_counts) == 1 and None not in frame_counts:
+            try:
+                shared_batch = await asyncio.to_thread(
+                    loaded[0][1].preprocess_clip, clip_input
+                )
+            except Exception as e:
+                print(f"[INFERENCE] shared preprocess failed, per-model path: {e}")
+                shared_batch = None
+
+        for name, model, verifier in loaded:
+            try:
+                if shared_batch is not None:
+                    prediction = await asyncio.to_thread(
+                        model.predict_preprocessed, shared_batch, clip_input
+                    )
+                else:
+                    prediction = await asyncio.to_thread(model.predict, clip_input)
+            except Exception as e:
+                # Never crash the pipeline due to one model.
+                print(f"[INFERENCE][{name}] prediction error: {e}")
+                continue
+
+            if prediction is not None:
+                await self._handle_prediction(name, prediction, verifier)
 
     async def _handle_prediction(
         self, name: str, prediction: ModelPrediction, verifier

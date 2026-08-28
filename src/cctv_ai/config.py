@@ -59,6 +59,19 @@ class Settings(BaseSettings):
     # path is within tolerance on your clips.
     CLIP_PREPROCESS_FAST: bool = False
 
+    # Per-model clip sampling window. 0 (default) keeps the old behaviour: the
+    # clip is the last CLIP_FRAME_COUNT consecutive frames (~0.3 s tail of the
+    # interval). A positive value spreads the same CLIP_FRAME_COUNT frames
+    # evenly across the trailing N seconds instead, which matches how the models
+    # were trained (frames sampled across a whole clip) and covers the whole
+    # inference interval. Detection is byte-identical until a value is set.
+    # The two models can differ; when they do, each samples its own clip and
+    # the shared-tensor fast path is skipped for that cycle. A window wider than
+    # the buffer holds (FRAME_BUFFER_MAXLEN frames of history) is clamped to
+    # what is available.
+    ACCIDENT_CLIP_WINDOW_SEC: float = 0.0
+    VIOLENCE_CLIP_WINDOW_SEC: float = 0.0
+
     ACCIDENT_CONFIDENCE_THRESHOLD: float = 0.6
     ACCIDENT_MIN_HITS: int = 3
     ACCIDENT_WINDOW_SEC: float = 3.0
