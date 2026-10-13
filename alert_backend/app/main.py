@@ -16,6 +16,10 @@ from .models import VerifiedEventIn
 from .services import alert_twiml, emergency_message, is_acknowledgement, place_call, say_twiml, synthesize_to_file
 from .store import IncidentStore
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 AUDIO_DIR = Path("data/audio")
 logger = logging.getLogger("cctv_alert_backend")
 
@@ -47,12 +51,25 @@ async def assert_twilio_signature(request: Request, form: dict) -> None:
         raise HTTPException(status_code=403, detail="invalid Twilio signature")
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store = IncidentStore(settings.DATABASE_URL)
     await asyncio.to_thread(store.initialize)
     app.state.store = store
+    sid = settings.TWILIO_ACCOUNT_SID
+    sid_display = f"{sid[:6]}...{sid[-4:]}" if len(sid) > 10 else "(not set)"
+    token_set = bool(settings.TWILIO_AUTH_TOKEN)
+    logger.info(
+        "Alert backend started | Twilio SID=%s token_set=%s from=%s to=%s call_mode=%s",
+        sid_display,
+        token_set,
+        settings.TWILIO_FROM_NUMBER or "(not set)",
+        settings.TWILIO_TO_NUMBER or "(not set)",
+        settings.TWILIO_CALL_MODE,
+    )
     yield
+
 
 
 app = FastAPI(title="CCTV Alert Backend", lifespan=lifespan)
