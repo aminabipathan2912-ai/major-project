@@ -6,3 +6,4 @@ httpx
 psycopg[binary]
 twilio
 python-multipart
+feedparser

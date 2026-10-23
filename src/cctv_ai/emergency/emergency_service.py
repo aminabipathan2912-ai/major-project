@@ -25,11 +25,30 @@ class EmergencyProvider(ABC):
 
 
 class LogOnlyEmergencyProvider(EmergencyProvider):
+    def __init__(self, settings: Settings | None = None) -> None:
+        self._settings = settings
+
     async def on_verified_emergency(self, event: VerifiedEvent) -> None:
+        location = getattr(self._settings, "INCIDENT_LOCATION", "Configured Location") if self._settings else "Configured Location"
+        kind = "road accident" if event.event_type == "ACCIDENT" else "violent incident"
+        when = time.strftime("%I:%M %p")
+        message = (
+            f"This is an automated emergency alert. "
+            f"A possible {kind} has been detected at {location}. "
+            f"Camera ID is {event.camera_id}. The incident was detected at {when}. "
+            f"Please say done to confirm that the incident has been reported."
+        )
         print(
-            f"[EMERGENCY][{time.strftime('%Y-%m-%d %H:%M:%S')}] {event.event_type} "
-            f"camera={event.camera_id} conf={event.confidence:.3f} ts={event.timestamp_epoch_s:.3f} "
-            f"label={event.verified_label}"
+            f"\n============================================================"
+            f"\n[EMERGENCY LOG-ONLY TRIGGERED]"
+            f"\nType:       {event.event_type}"
+            f"\nCamera:     {event.camera_id}"
+            f"\nLocation:   {location}"
+            f"\nConfidence: {event.confidence:.2f}"
+            f"\nTimestamp:  {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            f"\n\n[SPOKEN CALL TEXT THAT WOULD BE SAID]:"
+            f"\n\"{message}\""
+            f"\n============================================================\n"
         )
         await asyncio.sleep(0)
 
@@ -199,7 +218,7 @@ class RemoteEmergencyProvider(EmergencyProvider):
 
 def create_emergency_provider(settings: Settings) -> EmergencyProvider:
     if settings.EMERGENCY_MODE == "log-only":
-        return LogOnlyEmergencyProvider()
+        return LogOnlyEmergencyProvider(settings)
     if settings.EMERGENCY_MODE == "remote":
         return RemoteEmergencyProvider(settings)
     raise ValueError(f"Unsupported EMERGENCY_MODE: {settings.EMERGENCY_MODE}")
