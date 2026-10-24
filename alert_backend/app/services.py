@@ -14,6 +14,8 @@ from twilio.twiml.voice_response import Gather, VoiceResponse
 
 from .config import Settings
 
+logger = logging.getLogger("cctv_alert_backend")
+
 ACKNOWLEDGEMENTS = (
     "done",
     "reported",
