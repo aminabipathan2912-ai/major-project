@@ -211,20 +211,22 @@ async def twilio_voice(incident_id: str, request: Request):
 async def acknowledge(incident_id: str, request: Request):
     form = dict(await request.form())
     await assert_twilio_signature(request, form)
-    speech = str(form.get("SpeechResult") or "")
+    speech = str(form.get("SpeechResult") or "").strip()
+    digits = str(form.get("Digits") or "").strip()
     incident = await asyncio.to_thread(app.state.store.get_incident, incident_id)
     if not incident:
         return xml(say_twiml("Incident not found."))
-    if is_acknowledgement(speech):
+    if is_acknowledgement(speech) or digits in {"1", "9", "*", "#"}:
+        recorded = speech or (f"Pressed key {digits}" if digits else "Confirmed")
         await asyncio.to_thread(
             app.state.store.update_incident,
             incident_id,
             status="REPORTED",
-            speech_result=speech,
+            speech_result=recorded,
             acknowledged_at=datetime.now(timezone.utc),
         )
         return xml(say_twiml("Acknowledgement received. The incident has been reported."))
-    await asyncio.to_thread(app.state.store.update_incident, incident_id, status="NO_ACKNOWLEDGEMENT")
+    await asyncio.to_thread(app.state.store.update_incident, incident_id, status="NO_ACKNOWLEDGEMENT", speech_result=speech or None)
     return xml(say_twiml("Acknowledgement was not recognized. The call will now end."))
 
 

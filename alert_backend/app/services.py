@@ -14,8 +14,22 @@ from twilio.twiml.voice_response import Gather, VoiceResponse
 
 from .config import Settings
 
-logger = logging.getLogger("cctv_alert_backend")
-ACKNOWLEDGEMENTS = ("done", "reported", "yes", "acknowledged", "confirmed")
+ACKNOWLEDGEMENTS = (
+    "done",
+    "reported",
+    "yes",
+    "yeah",
+    "yup",
+    "ok",
+    "okay",
+    "acknowledged",
+    "confirmed",
+    "roger",
+    "copy",
+    "received",
+    "one",
+    "1",
+)
 
 _NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
 _MAX_AGE_SEC = 172800  # 48 hours
@@ -74,7 +88,7 @@ def emergency_message(event: dict) -> str:
         f"A possible {kind} has been detected at {event['location']}. "
         f"Camera ID is {event['camera_id']}. The incident was detected at {when}."
         f"{context_part} "
-        "Please say done to confirm that the incident has been reported."
+        "Please say done or press 1 to confirm that the incident has been reported."
     )
 
 def is_acknowledgement(speech: str) -> bool:
@@ -142,14 +156,15 @@ def alert_twiml(settings: Settings, incident_id: str, message: str, audio_filena
     response = VoiceResponse()
     base = settings.PUBLIC_BASE_URL.rstrip("/")
     gather = Gather(
-        input="speech",
+        input="speech dtmf",
+        num_digits=1,
         action=f"{base}/twilio/acknowledge/{incident_id}",
         method="POST",
         speech_timeout="auto",
-        timeout=7,
+        timeout=10,
         action_on_empty_result=True,
         language="en-IN",
-        hints="done,reported,acknowledged",
+        hints="done, reported, yes, acknowledged, ok, okay",
     )
     if audio_filename:
         gather.play(f"{base}/audio/{audio_filename}")
