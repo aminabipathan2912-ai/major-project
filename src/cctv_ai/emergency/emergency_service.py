@@ -24,6 +24,52 @@ class EmergencyProvider(ABC):
         return None
 
 
+import urllib.parse
+try:
+    import feedparser
+except ImportError:
+    feedparser = None
+
+_NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
+_MAX_AGE_SEC = 172800  # 48 hours
+_FETCH_TIMEOUT_SEC = 4
+
+
+def _get_news_context(location: str, event_type: str) -> str:
+    if not feedparser or not location:
+        return ""
+    kind = "accident" if event_type == "ACCIDENT" else "violence OR assault OR attack"
+    # Try event-specific first, then fall back to any incident at that location
+    candidate_queries = [
+        f"{location} {kind}",
+        f"{location} (accident OR crash OR collision OR violence OR crime OR incident)",
+    ]
+    now = time.time()
+    for q in candidate_queries:
+        query = urllib.parse.quote(q)
+        url = _NEWS_RSS.format(query=query)
+        try:
+            response = httpx.get(url, timeout=_FETCH_TIMEOUT_SEC, follow_redirects=True)
+            response.raise_for_status()
+            feed = feedparser.parse(response.text)
+        except Exception:
+            continue
+
+        for entry in feed.entries[:5]:
+            published = entry.get("published_parsed")
+            if published is None:
+                continue
+            age_sec = now - time.mktime(published)
+            if age_sec > _MAX_AGE_SEC:
+                continue
+            title = (entry.get("title") or "").strip()
+            if " - " in title:
+                title = title.rsplit(" - ", 1)[0].strip()
+            if title:
+                return f"Note: recent news also reports — {title}."
+    return ""
+
+
 class LogOnlyEmergencyProvider(EmergencyProvider):
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings
@@ -32,10 +78,13 @@ class LogOnlyEmergencyProvider(EmergencyProvider):
         location = getattr(self._settings, "INCIDENT_LOCATION", "Configured Location") if self._settings else "Configured Location"
         kind = "road accident" if event.event_type == "ACCIDENT" else "violent incident"
         when = time.strftime("%I:%M %p")
+        context = await asyncio.to_thread(_get_news_context, location, event.event_type)
+        context_part = f" {context}" if context else ""
         message = (
             f"This is an automated emergency alert. "
             f"A possible {kind} has been detected at {location}. "
-            f"Camera ID is {event.camera_id}. The incident was detected at {when}. "
+            f"Camera ID is {event.camera_id}. The incident was detected at {when}."
+            f"{context_part} "
             f"Please say done to confirm that the incident has been reported."
         )
         print(

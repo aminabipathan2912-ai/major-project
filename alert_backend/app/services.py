@@ -18,7 +18,7 @@ logger = logging.getLogger("cctv_alert_backend")
 ACKNOWLEDGEMENTS = ("done", "reported", "yes", "acknowledged", "confirmed")
 
 _NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
-_MAX_AGE_SEC = 86400  # 24 hours
+_MAX_AGE_SEC = 172800  # 48 hours
 _FETCH_TIMEOUT_SEC = 4
 
 
@@ -28,32 +28,38 @@ def fetch_location_context(location: str, event_type: str) -> str:
     Returns a single short sentence suitable for appending to the TTS message,
     or an empty string if nothing relevant or the fetch fails.
     """
-    kind = "accident" if event_type == "ACCIDENT" else "violence OR assault OR attack"
-    query = urllib.parse.quote(f"{location} {kind}")
-    url = _NEWS_RSS.format(query=query)
-    try:
-        response = httpx.get(url, timeout=_FETCH_TIMEOUT_SEC, follow_redirects=True)
-        response.raise_for_status()
-        feed = feedparser.parse(response.text)
-    except Exception as exc:
-        logger.warning("News RSS fetch failed for location=%r: %s", location, exc)
+    if not location:
         return ""
-
+    kind = "accident" if event_type == "ACCIDENT" else "violence OR assault OR attack"
+    candidate_queries = [
+        f"{location} {kind}",
+        f"{location} (accident OR crash OR collision OR violence OR crime OR incident)",
+    ]
     now = time.time()
-    for entry in feed.entries[:5]:  # check at most top 5 results
-        published = entry.get("published_parsed")
-        if published is None:
+    for q in candidate_queries:
+        query = urllib.parse.quote(q)
+        url = _NEWS_RSS.format(query=query)
+        try:
+            response = httpx.get(url, timeout=_FETCH_TIMEOUT_SEC, follow_redirects=True)
+            response.raise_for_status()
+            feed = feedparser.parse(response.text)
+        except Exception as exc:
+            logger.warning("News RSS fetch failed for query=%r: %s", q, exc)
             continue
-        age_sec = now - time.mktime(published)
-        if age_sec > _MAX_AGE_SEC:
-            continue  # article is older than 24 h — not relevant
-        title = (entry.get("title") or "").strip()
-        # Strip source tag appended by Google News (e.g. " - The Hindu")
-        if " - " in title:
-            title = title.rsplit(" - ", 1)[0].strip()
-        if title:
-            logger.info("News context found for location=%r: %r", location, title)
-            return f"Note: recent news also reports — {title}."
+
+        for entry in feed.entries[:5]:
+            published = entry.get("published_parsed")
+            if published is None:
+                continue
+            age_sec = now - time.mktime(published)
+            if age_sec > _MAX_AGE_SEC:
+                continue
+            title = (entry.get("title") or "").strip()
+            if " - " in title:
+                title = title.rsplit(" - ", 1)[0].strip()
+            if title:
+                logger.info("News context found for location=%r: %r", location, title)
+                return f"Note: recent news also reports — {title}."
 
     return ""
 
